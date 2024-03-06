@@ -34,16 +34,6 @@ contract ERC20Token is
     bytes32 constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     uint8 private _decimals;
 
-    struct Features {
-        bool permit;
-        bool flashMint;
-        bool votes;
-        bool pausable;
-        address pauser;
-    }
-
-    Features public features;
-
     constructor() {
         _disableInitializers();
     }
@@ -55,33 +45,21 @@ contract ERC20Token is
         address defaultAdmin,
         address minter,
         address upgrader,
-        address pauser,
-        Features memory _features
+        address pauser
     ) public initializer {
         __ERC20_init(name, symbol);
         __ERC20Burnable_init();
         __AccessControl_init();
         __UUPSUpgradeable_init();
-         features = _features;
          _decimals = customDecimals;
 
-         if (features.pausable) {
-            require(pauser != address(0), "Provide address for Pauser");
-            __ERC20Pausable_init();
-            _grantRole(PAUSER_ROLE, pauser);
-         }
+         require(pauser != address(0), "Provide address for Pauser");
+         __ERC20Pausable_init();
+         _grantRole(PAUSER_ROLE, pauser);
 
-         if (features.permit) {
-            __ERC20Permit_init(name);
-         }
-
-         if (features.flashMint) {
-            __ERC20FlashMint_init();
-         }
-
-         if (features.votes) {
-            __ERC20Votes_init();
-         }
+         __ERC20Permit_init(name);
+         __ERC20FlashMint_init();
+         __ERC20Votes_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(MINTER_ROLE, minter);
@@ -94,12 +72,10 @@ contract ERC20Token is
     }
 
     function pause() public onlyRole(PAUSER_ROLE) {
-        require (features.pausable, "This token does not have pausable feature");
         _pause();
     }
 
     function unpause() public onlyRole(PAUSER_ROLE) {
-        require (features.pausable, "This token does not have pausable feature");
         _unpause();
     }
 
@@ -117,7 +93,6 @@ contract ERC20Token is
     }
 
     function nonces(address owner) public view override(ERC20PermitUpgradeable, NoncesUpgradeable) returns (uint256) {
-        require(features.votes, "This token does not have ");
         return super.nonces(owner);
     }
 
