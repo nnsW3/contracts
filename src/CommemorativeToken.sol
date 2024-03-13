@@ -2,8 +2,9 @@
 pragma solidity 0.8.23;
 
 import {ERC721} from "@openzeppelin-contracts/token/ERC721/ERC721.sol";
+import {ERC721URIStorage} from "@openzeppelin-contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 
-contract CommemorativeToken is ERC721 {
+contract CommemorativeToken is ERC721URIStorage {
     uint256 private _nextTokenId;
 
     constructor() ERC721("Commemorative Token", "CNFT") {}
@@ -11,6 +12,7 @@ contract CommemorativeToken is ERC721 {
     function mint() public returns (uint256) {
         uint256 tokenId = _nextTokenId++;
         _safeMint(msg.sender, tokenId);
+        _setTokenURI(tokenId, "https://assets.plumenetwork.xyz/metadata/mineral-vault.json");
         return tokenId;
     }
 }
