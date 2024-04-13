@@ -7,12 +7,12 @@ import {ERC721URIStorage} from "@openzeppelin-contracts/token/ERC721/extensions/
 contract CommemorativeToken is ERC721URIStorage {
     uint256 private _nextTokenId;
 
-    constructor() ERC721("Commemorative Token", "CNFT") {}
+    constructor() ERC721("Plume x Bitget NFT", "NFT") {}
 
     function mint() public returns (uint256) {
         uint256 tokenId = _nextTokenId++;
         _safeMint(msg.sender, tokenId);
-        _setTokenURI(tokenId, "https://assets.plumenetwork.xyz/metadata/mineral-vault.json");
+        _setTokenURI(tokenId, "https://assets.plumenetwork.xyz/metadata/plume-bitget-nft.json");
         return tokenId;
     }
 }
