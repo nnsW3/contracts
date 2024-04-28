@@ -1,5 +1,5 @@
 [profile.default]
-solc = "0.8.23"
+solc = "0.8.25"
 evm_version = "shanghai"
 src = "src"
 out = "out"
