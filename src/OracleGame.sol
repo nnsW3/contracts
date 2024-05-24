@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.23;
+pragma solidity 0.8.25;
 
 import {ISupraOraclePull} from "./interfaces/SupraOracle.sol";
 
@@ -10,11 +10,13 @@ contract OracleGame {
     uint256 public constant pairDuration = 1 days;
     uint256 public constant guessWaitTime = 1 hours;
 
-    uint256[] public allPairs;
+    uint256 public immutable startTime;
 
+    uint256[] public allPairs;
     int256 public currentPairIndex = -1;
 
-    uint256 public startTime;
+    mapping(address => uint256) public userPoints;
+    mapping(address => bool) public userParticipated;
 
     struct UserGuess {
         uint256 pair;
@@ -37,7 +39,6 @@ contract OracleGame {
     }
 
     mapping(uint256 => PairGuesses) public priceGuesses;
-    mapping(address => uint256) public userPoints;
 
     event GuessPairPrice(address indexed guesser, uint256 indexed pair, uint256 price);
     event RewardPairGuess(
@@ -75,6 +76,8 @@ contract OracleGame {
         // updating the last guesser in the linked list
         priceGuesses[currentPair].lastGuesser = msg.sender;
 
+        userParticipated[msg.sender] = true;
+
         emit GuessPairPrice(msg.sender, currentPair, price);
     }
 
@@ -98,6 +101,16 @@ contract OracleGame {
         }
 
         return userGuesses;
+    }
+
+    function getUserParticipation(address[] calldata users) public view returns (bool[] memory) {
+        bool[] memory participation = new bool[](users.length);
+
+        for (uint256 i = 0; i < users.length; ++i) {
+            participation[i] = userParticipated[users[i]];
+        }
+
+        return participation;
     }
 
     // Get the prices of a pairs from oracle data
