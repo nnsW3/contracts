@@ -2,21 +2,13 @@
 pragma solidity ^0.8.14;
 
 import "@openzeppelin-contracts/access/AccessControl.sol";
-import "./interfaces/IDateTime.sol";
 import "@openzeppelin-contracts/utils/cryptography/SignatureChecker.sol";
+import "./interfaces/IDateTime.sol";
 
 error NoReRollsLeft();
 error InvalidClass();
 
 contract CheckIn is AccessControl {
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-    uint256 constant SECONDS_PER_DAY = 86400;
-    uint256 public basePoints = 5000;
-    uint256 public faucetPoints = 5000;
-    address public admin;
-    address public faucet;
-    mapping(address => mapping(string => uint256)) public faucetLastClaimed;
-
     struct UserInfo {
         // economy = 0, business = 1, first = 2, private = 3
         uint8 class;
@@ -26,15 +18,34 @@ contract CheckIn is AccessControl {
         uint8 lastCheckInWeek;
         uint256 streakCount;
         uint256 reRolls;
-        uint256 points;
+        uint256 flightPoints; // checkin, mint, reroll, upgrade class
+        uint256 faucetPoints;
+        uint256 rwaStakingPoints;
+        uint256 oracleGamePoints;
     }
 
-    event CheckInEvent(address indexed user, uint16 year, uint8 month, uint8 day);
-    event PointsUpdated(address indexed user, uint256 points);
+    struct UserPoints {
+        uint256 flightPoints;
+        uint256 faucetPoints;
+        uint256 rwaStakingPoints;
+        uint256 oracleGamePoints;
+    }
+
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    uint256 constant SECONDS_PER_DAY = 86400;
+
+    uint256 public basePoints = 5000;
+    uint256 public faucetPoints = 5000;
+    address public admin;
+    address public faucet;
+    mapping(address => mapping(string => uint256)) public faucetLastClaimed;
 
     mapping(address => UserInfo) public users;
     mapping(address => bool[7]) public weeklyCheckIns;
     IDateTime dateTime;
+
+    event CheckInEvent(address indexed user, uint16 year, uint8 month, uint8 day);
+    event PointsUpdated(address indexed user, UserPoints points);
 
     constructor(address _dateTimeAddress, address _faucetAddress) {
         _grantRole(ADMIN_ROLE, msg.sender);
@@ -138,8 +149,10 @@ contract CheckIn is AccessControl {
         weeklyCheckIns[msg.sender][currentWeekday - 1] = true;
         user.lastCheckInWeek = currentWeek;
 
-        user.points += calculatePoints(user.streakCount);
-        emit PointsUpdated(msg.sender, user.points);
+        user.flightPoints += calculatePoints(user.streakCount);
+        emit PointsUpdated(
+            msg.sender, UserPoints(user.flightPoints, user.faucetPoints, user.rwaStakingPoints, user.oracleGamePoints)
+        );
 
         emit CheckInEvent(msg.sender, currentYear, currentMonth, currentDay);
     }
@@ -174,11 +187,11 @@ contract CheckIn is AccessControl {
         ) revert InvalidClass();
         users[user].class = _class;
         require(_class > users[user].class, "Class not downgraded");
-        users[user].points += 10000 * (_class - users[user].class);
+        users[user].flightPoints += 10000 * (_class - users[user].class);
     }
 
     function _adminIncrementPoints(address user, uint256 points) public onlyRole(ADMIN_ROLE) {
-        users[user].points += points;
+        users[user].flightPoints += points;
     }
 
     function incrementPoints(string memory _tokenUri, address user, bytes memory signature, uint8 tier)
@@ -187,15 +200,15 @@ contract CheckIn is AccessControl {
     {
         require(tier < 6, "Invalid tier");
         if (tier == 1) {
-            users[user].points += 30000;
+            users[user].flightPoints += 30000;
         } else if (tier == 2) {
-            users[user].points += 18000;
+            users[user].flightPoints += 18000;
         } else if (tier == 3) {
-            users[user].points += 12000;
+            users[user].flightPoints += 12000;
         } else if (tier == 4) {
-            users[user].points += 10000;
+            users[user].flightPoints += 10000;
         } else {
-            users[user].points += 8000;
+            users[user].flightPoints += 8000;
         }
     }
 
@@ -210,13 +223,25 @@ contract CheckIn is AccessControl {
 
         if (!isSameDay(prevYear, prevMonth, prevDay, currentYear, currentMonth, currentDay)) {
             faucetLastClaimed[user][token] = block.timestamp;
-            users[user].points += faucetPoints;
-            emit PointsUpdated(user, users[user].points);
+            users[user].faucetPoints += faucetPoints;
+            emit PointsUpdated(
+                user,
+                UserPoints(
+                    users[user].flightPoints,
+                    users[user].faucetPoints,
+                    users[user].rwaStakingPoints,
+                    users[user].oracleGamePoints
+                )
+            );
         }
     }
 
-    function _adminSetUserPoints(address user, uint256 points) public onlyRole(ADMIN_ROLE) {
-        users[user].points = points;
+    function _adminSetUserPoints(address user, UserPoints calldata points) public onlyRole(ADMIN_ROLE) {
+        UserInfo storage userInfo = users[user];
+        userInfo.flightPoints = points.flightPoints;
+        userInfo.faucetPoints = points.faucetPoints;
+        userInfo.rwaStakingPoints = points.rwaStakingPoints;
+        userInfo.oracleGamePoints = points.oracleGamePoints;
     }
 
     function _adminSetUserClass(address user, uint8 _class) public onlyRole(ADMIN_ROLE) {
@@ -290,14 +315,17 @@ contract CheckIn is AccessControl {
         return users[user].class;
     }
 
-    function getPoints(address user) public view returns (uint256) {
-        return users[user].points;
+    function getPoints(address user) public view returns (UserPoints memory) {
+        UserInfo storage info = users[user];
+        return UserPoints(info.flightPoints, info.faucetPoints, info.rwaStakingPoints, info.oracleGamePoints);
     }
 
-    function getUsersPoints(address[] memory _users) public view returns (uint256[] memory) {
-        uint256[] memory points = new uint256[](_users.length);
+    function getUsersPoints(address[] memory _users) public view returns (UserPoints[] memory) {
+        UserPoints[] memory points = new UserPoints[](_users.length);
         for (uint256 i = 0; i < _users.length; i++) {
-            points[i] = users[_users[i]].points;
+            UserInfo storage user = users[_users[i]];
+
+            points[i] = UserPoints(user.flightPoints, user.faucetPoints, user.rwaStakingPoints, user.oracleGamePoints);
         }
         return points;
     }
