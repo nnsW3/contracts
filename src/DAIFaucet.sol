@@ -8,6 +8,7 @@ interface IERC20 {
 contract DAIFaucet {
     uint256 public tokenAmount = 100000 * 10 ** 18;
     IERC20 public tokenInstance;
+
     event TokensWithdrawn(address indexed recipient, uint256 amount);
 
     constructor(address _tokenInstance) {

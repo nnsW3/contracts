@@ -51,20 +51,19 @@ contract ERC20Token is
         __ERC20Burnable_init();
         __AccessControl_init();
         __UUPSUpgradeable_init();
-         _decimals = customDecimals;
+        _decimals = customDecimals;
 
-         require(pauser != address(0), "Provide address for Pauser");
-         __ERC20Pausable_init();
-         _grantRole(PAUSER_ROLE, pauser);
+        require(pauser != address(0), "Provide address for Pauser");
+        __ERC20Pausable_init();
+        _grantRole(PAUSER_ROLE, pauser);
 
-         __ERC20Permit_init(name);
-         __ERC20FlashMint_init();
-         __ERC20Votes_init();
+        __ERC20Permit_init(name);
+        __ERC20FlashMint_init();
+        __ERC20Votes_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
         _grantRole(MINTER_ROLE, minter);
         _grantRole(UPGRADER_ROLE, upgrader);
-
     }
 
     function mint(address to, uint256 amount) public onlyRole(MINTER_ROLE) {

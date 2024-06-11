@@ -8,6 +8,7 @@ interface IERC20 {
 contract USDCFaucet {
     uint256 public tokenAmount = 100000 * 10 ** 6;
     IERC20 public tokenInstance;
+
     event TokensWithdrawn(address indexed recipient, uint256 amount);
 
     constructor(address _tokenInstance) {
