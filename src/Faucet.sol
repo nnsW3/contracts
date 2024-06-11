@@ -4,10 +4,7 @@ pragma solidity 0.8.25;
 import {IERC20Metadata} from "@openzeppelin-contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {ECDSA} from "@openzeppelin-contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin-contracts/utils/cryptography/MessageHashUtils.sol";
-
-interface ICheckIn {
-    function faucetCheckIn(address user, string calldata token) external;
-}
+import {ICheckIn} from "./interfaces/ICheckIn.sol";
 
 contract Faucet {
     using ECDSA for bytes32;
@@ -88,7 +85,7 @@ contract Faucet {
 
         emit TokenSent(msg.sender, tokenAmount, token);
 
-        checkIn.faucetCheckIn(msg.sender, token);
+        checkIn.incrementFaucetPoints(msg.sender, token);
     }
 
     function transferAdmin(address newAdmin) external onlyAdmin {

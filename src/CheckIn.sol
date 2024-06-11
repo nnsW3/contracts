@@ -3,12 +3,13 @@ pragma solidity ^0.8.14;
 
 import "@openzeppelin-contracts/access/AccessControl.sol";
 import "@openzeppelin-contracts/utils/cryptography/SignatureChecker.sol";
+import "./interfaces/ICheckIn.sol";
 import "./interfaces/IDateTime.sol";
 
 error NoReRollsLeft();
 error InvalidClass();
 
-contract CheckIn is AccessControl {
+contract CheckIn is AccessControl, ICheckIn {
     struct UserInfo {
         // economy = 0, business = 1, first = 2, private = 3
         uint8 class;
@@ -272,6 +273,10 @@ contract CheckIn is AccessControl {
         for (uint8 i = 0; i < 7; i++) {
             weeklyCheckIns[user][i] = checkins[i];
         }
+    }
+
+    function _adminSetFaucetContract(address _faucet) public onlyRole(ADMIN_ROLE) {
+        faucet = _faucet;
     }
 
     function isNextDay(
