@@ -186,9 +186,9 @@ contract CheckIn is AccessControl, ICheckIn {
             users[user].class == 3 // Should not upgrade if already private
                 || _class > 3 || _class < 0
         ) revert InvalidClass();
+        require(_class == users[user].class + 1, "Can only upgrade to the next class");
         users[user].class = _class;
-        require(_class > users[user].class, "Class not downgraded");
-        users[user].flightPoints += 10000 * (_class - users[user].class);
+        users[user].flightPoints += 10000;
     }
 
     function _adminIncrementPoints(address user, uint256 points) public onlyRole(ADMIN_ROLE) {
