@@ -5,61 +5,66 @@ import {IERC20Metadata} from "@openzeppelin-contracts/token/ERC20/extensions/IER
 import {ECDSA} from "@openzeppelin-contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin-contracts/utils/cryptography/MessageHashUtils.sol";
 import {ICheckIn} from "./interfaces/ICheckIn.sol";
+import "@openzeppelin-contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "./FaucetStorage.sol";
 
-contract Faucet {
+contract Faucet is Initializable, UUPSUpgradeable {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
+    using FaucetStorage for FaucetStorage.Storage;
 
     address public constant ETH_ADDRESS = address(1);
-
-    uint256 public etherAmount = 0.001 ether;
-    uint256 public tokenAmount = 1000;
-
-    address public admin;
-    ICheckIn public checkIn;
-    mapping(string => address) public tokens;
-    mapping(bytes32 => bool) public usedNonces;
 
     event TokenSent(address indexed recipient, uint256 amount, string tokenName);
     event Withdrawn(address indexed recipient, uint256 amount, string tokenName);
     event AdminChanged(address indexed oldAdmin, address indexed newAdmin);
     event CheckInContractChanged(address indexed oldCheckInContract, address indexed newCheckInContract);
 
-    constructor(address _admin, address checkInContract, string[] memory tokenNames, address[] memory tokenAddresses) {
+    function initialize(
+        address _admin,
+        address checkInContract,
+        string[] memory tokenNames,
+        address[] memory tokenAddresses
+    ) public initializer {
         require(_admin != address(0), "Admin address must not be empty");
         require(checkInContract != address(0), "CheckIn contract address must not be empty");
         require(tokenNames.length > 0, "Token names must not be empty");
         require(tokenNames.length == tokenAddresses.length, "Length of token names and addresses must be equal");
 
-        admin = _admin;
-        checkIn = ICheckIn(checkInContract);
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        fs.admin = _admin;
+        fs.etherAmount = 0.001 ether;
+        fs.tokenAmount = 1000;
+        fs.checkIn = ICheckIn(checkInContract);
 
         bytes32 ethHash = keccak256(abi.encodePacked("ETH"));
 
         for (uint256 i = 0; i < tokenNames.length; i++) {
             if (keccak256(bytes(tokenNames[i])) == ethHash) {
-                tokens[tokenNames[i]] = ETH_ADDRESS;
+                fs.tokens[tokenNames[i]] = ETH_ADDRESS;
             } else {
-                tokens[tokenNames[i]] = tokenAddresses[i];
+                fs.tokens[tokenNames[i]] = tokenAddresses[i];
             }
         }
     }
 
-    modifier onlyAdmin() {
-        require(msg.sender == admin, "Only admin can call this function");
+    function _authorizeUpgrade(address newImplementation) internal override onlyAdmin {}
 
+    modifier onlyAdmin() {
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        require(msg.sender == fs.admin, "Only admin can call this function");
         _;
     }
 
     modifier onlySignedByAdmin(string calldata token, bytes32 salt, bytes calldata signature) {
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
         bytes32 message = keccak256(abi.encodePacked(msg.sender, token, salt));
 
-        require(!usedNonces[message], "Signature is already used");
+        require(!fs.usedNonces[message], "Signature is already used");
+        require(message.toEthSignedMessageHash().recover(signature) == fs.admin, "Invalid admin signature");
 
-        require(message.toEthSignedMessageHash().recover(signature) == admin, "Invalid admin signature");
-
-        usedNonces[message] = true;
-
+        fs.usedNonces[message] = true;
         _;
     }
 
@@ -67,68 +72,103 @@ contract Faucet {
         external
         onlySignedByAdmin(token, salt, signature)
     {
-        address tokenAddress = tokens[token];
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        address tokenAddress = fs.tokens[token];
 
         require(tokenAddress != address(0), "Invalid token");
 
+        uint256 amount;
         if (tokenAddress == ETH_ADDRESS) {
-            require(address(this).balance >= etherAmount, "Insufficient balance");
-
-            (bool success,) = msg.sender.call{value: etherAmount, gas: 2300}("");
-
+            amount = fs.etherAmount;
+            require(address(this).balance >= amount, "Insufficient balance");
+            (bool success,) = msg.sender.call{value: amount, gas: 2300}("");
             require(success, "Failed to send Ether");
         } else {
-            IERC20Metadata tokenContract = IERC20Metadata(tokens[token]);
+            amount = fs.tokenAmount;
+            IERC20Metadata tokenContract = IERC20Metadata(tokenAddress);
             uint8 decimals = tokenContract.decimals();
-            tokenContract.transfer(msg.sender, tokenAmount * (10 ** decimals));
+            tokenContract.transfer(msg.sender, amount * (10 ** decimals));
         }
 
-        emit TokenSent(msg.sender, tokenAmount, token);
+        emit TokenSent(msg.sender, amount, token);
 
-        checkIn.incrementFaucetPoints(msg.sender, token);
+        fs.checkIn.incrementFaucetPoints(msg.sender, token);
     }
 
     function transferAdmin(address newAdmin) external onlyAdmin {
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
         require(newAdmin != address(0), "New admin address must not be empty");
 
-        emit AdminChanged(admin, newAdmin);
-
-        admin = newAdmin;
+        emit AdminChanged(fs.admin, newAdmin);
+        fs.admin = newAdmin;
     }
 
     function setCheckInContract(address newCheckInContract) external onlyAdmin {
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
         require(newCheckInContract != address(0), "New checkIn contract address must not be empty");
 
-        emit CheckInContractChanged(address(checkIn), newCheckInContract);
-
-        checkIn = ICheckIn(newCheckInContract);
+        emit CheckInContractChanged(address(fs.checkIn), newCheckInContract);
+        fs.checkIn = ICheckIn(newCheckInContract);
     }
 
     function setEtherAmount(uint256 amount) external onlyAdmin {
-        etherAmount = amount;
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        fs.etherAmount = amount;
     }
 
     function setTokenAmount(uint256 amount) external onlyAdmin {
-        tokenAmount = amount;
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        fs.tokenAmount = amount;
     }
 
     function withdrawToken(string calldata token, uint256 amount, address payable recipient) external onlyAdmin {
-        address tokenAddress = tokens[token];
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        address tokenAddress = fs.tokens[token];
 
         require(tokenAddress != address(0), "Invalid token");
 
         if (tokenAddress == ETH_ADDRESS) {
             require(address(this).balance >= amount, "Insufficient balance");
-
             (bool success,) = recipient.call{value: amount, gas: 2300}("");
-
             require(success, "Failed to send Ether");
         } else {
-            IERC20Metadata tokenContract = IERC20Metadata(tokens[token]);
+            IERC20Metadata tokenContract = IERC20Metadata(tokenAddress);
             tokenContract.transfer(recipient, amount);
         }
 
         emit Withdrawn(recipient, amount, token);
+    }
+
+    // View functions for storage variables
+
+    function getAdmin() public view returns (address) {
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        return fs.admin;
+    }
+
+    function getEtherAmount() public view returns (uint256) {
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        return fs.etherAmount;
+    }
+
+    function getTokenAmount() public view returns (uint256) {
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        return fs.tokenAmount;
+    }
+
+    function getCheckInContract() public view returns (address) {
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        return address(fs.checkIn);
+    }
+
+    function getTokenAddress(string calldata token) public view returns (address) {
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        return fs.tokens[token];
+    }
+
+    function isNonceUsed(bytes32 nonce) public view returns (bool) {
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        return fs.usedNonces[nonce];
     }
 
     receive() external payable {}

@@ -2,121 +2,74 @@
 pragma solidity ^0.8.14;
 
 import "@openzeppelin-contracts/access/AccessControl.sol";
-import "@openzeppelin-contracts/utils/cryptography/SignatureChecker.sol";
-import "./interfaces/ICheckIn.sol";
+import "@openzeppelin-contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin-contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+
 import "./interfaces/IDateTime.sol";
+import "./CheckInStorage.sol";
 
 error NoReRollsLeft();
 error InvalidClass();
 
-contract CheckIn is AccessControl, ICheckIn {
-    struct UserInfo {
-        // economy = 0, business = 1, first = 2, private = 3
-        uint8 class;
-        uint16 lastCheckinYear;
-        uint8 lastCheckinMonth;
-        uint8 lastCheckinDay;
-        uint8 lastCheckInWeek;
-        uint256 streakCount;
-        uint256 reRolls;
-        uint256 flightPoints; // checkin, mint, reroll, upgrade class
-        uint256 faucetPoints;
-        uint256 rwaStakingPoints;
-        uint256 oracleGamePoints;
-    }
-
-    struct UserPoints {
-        uint256 flightPoints;
-        uint256 faucetPoints;
-        uint256 rwaStakingPoints;
-        uint256 oracleGamePoints;
-    }
+contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
+    using CheckInStorage for CheckInStorage.Storage;
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     uint256 constant SECONDS_PER_DAY = 86400;
 
-    uint256 public basePoints = 5000;
-    uint256 public faucetPoints = 5000;
-    address public admin;
-    address public faucet;
-    mapping(address => mapping(string => uint256)) public faucetLastClaimed;
-
-    mapping(address => UserInfo) public users;
-    mapping(address => bool[7]) public weeklyCheckIns;
-    IDateTime dateTime;
-
     event CheckInEvent(address indexed user, uint16 year, uint8 month, uint8 day);
-    event PointsUpdated(address indexed user, UserPoints points);
+    event PointsUpdated(address indexed user, CheckInStorage.UserPoints points);
 
-    constructor(address _dateTimeAddress, address _faucetAddress) {
-        _grantRole(ADMIN_ROLE, msg.sender);
-        dateTime = IDateTime(_dateTimeAddress);
-        admin = msg.sender;
-        faucet = _faucetAddress;
+    function initialize(address _admin, address _dateTimeAddress, address _faucetAddress) public initializer {
+        __AccessControl_init();
+        __UUPSUpgradeable_init();
+
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        cs.basePoints = 5000;
+        cs.faucetPoints = 5000;
+        cs.admin = _admin;
+        cs.dateTimeAddress = _dateTimeAddress;
+        cs.faucet = _faucetAddress;
+
+        _grantRole(ADMIN_ROLE, _admin);
     }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(ADMIN_ROLE) {}
 
     modifier _onlyFaucet() {
-        require(msg.sender == faucet, "Only faucet can call this function");
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        require(msg.sender == cs.faucet, "Only faucet can call this function");
         _;
     }
 
-    modifier _onlyWithAdminSign(string memory _tokenUri, address user, bytes memory signature) {
-        require(onlyWithAdminSign(_tokenUri, user, signature), "Invalid signature, cannot increment points");
+    modifier _onlyGoon() {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        require(cs.goon == msg.sender, "Only goon contract can call this function");
         _;
-    }
-
-    function prefixed(bytes32 hash) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
-    }
-
-    function recoverSignerFromSignature(bytes32 message, bytes memory sig) internal pure returns (address) {
-        require(sig.length == 65);
-
-        uint8 v;
-        bytes32 r;
-        bytes32 s;
-
-        assembly {
-            // first 32 bytes, after the length prefix
-            r := mload(add(sig, 32))
-            // second 32 bytes
-            s := mload(add(sig, 64))
-            // final byte (first byte of the next 32 bytes)
-            v := byte(0, mload(add(sig, 96)))
-        }
-
-        return ecrecover(message, v, r, s);
-    }
-
-    function onlyWithAdminSign(string memory _tokenUri, address user, bytes memory signature)
-        internal
-        view
-        returns (bool)
-    {
-        bytes32 message = prefixed(keccak256(abi.encodePacked(_tokenUri, user)));
-        return recoverSignerFromSignature(message, signature) == admin;
     }
 
     function checkIn() public {
-        UserInfo storage user = users[msg.sender];
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        CheckInStorage.UserInfo storage user = cs.users[msg.sender];
+        IDateTime dateTime = IDateTime(cs.dateTimeAddress);
+
         uint16 currentYear = dateTime.getYear(block.timestamp);
         uint8 currentMonth = dateTime.getMonth(block.timestamp);
         uint8 currentDay = dateTime.getDay(block.timestamp);
         uint8 currentWeekday = dateTime.getWeekday(block.timestamp);
         uint8 currentWeek = dateTime.getWeekNumber(block.timestamp);
 
-        // getWeekDay returns 0 for Sunday, we want start of week i.e 0 to be monday
         if (currentWeekday == 0) {
             currentWeekday = 7;
         }
 
-        // Check if it's a new week and reset the weekly check-ins
         if (user.lastCheckInWeek != currentWeek) {
             resetWeeklyCheckIns(msg.sender);
         }
 
         if (user.streakCount == 0) {
-            user.streakCount = 1; // First time checkin
+            user.streakCount = 1;
         } else {
             if (
                 isNextDay(
@@ -125,7 +78,8 @@ contract CheckIn is AccessControl, ICheckIn {
                     user.lastCheckinDay,
                     currentYear,
                     currentMonth,
-                    currentDay
+                    currentDay,
+                    dateTime
                 )
             ) {
                 user.streakCount++;
@@ -147,12 +101,15 @@ contract CheckIn is AccessControl, ICheckIn {
         user.lastCheckinMonth = currentMonth;
         user.lastCheckinDay = currentDay;
         user.reRolls += calculateReRolls(user.class, user.streakCount);
-        weeklyCheckIns[msg.sender][currentWeekday - 1] = true;
+        cs.weeklyCheckIns[msg.sender][currentWeekday - 1] = true;
         user.lastCheckInWeek = currentWeek;
 
         user.flightPoints += calculatePoints(user.streakCount);
         emit PointsUpdated(
-            msg.sender, UserPoints(user.flightPoints, user.faucetPoints, user.rwaStakingPoints, user.oracleGamePoints)
+            msg.sender,
+            CheckInStorage.UserPoints(
+                user.flightPoints, user.faucetPoints, user.rwaStakingPoints, user.oracleGamePoints
+            )
         );
 
         emit CheckInEvent(msg.sender, currentYear, currentMonth, currentDay);
@@ -164,6 +121,7 @@ contract CheckIn is AccessControl, ICheckIn {
     // Business | 2
     // First    | 3
     // Private  | 5
+
     function calculateReRolls(uint256 class, uint256 streak) private pure returns (uint256) {
         if (class > 3 || class < 0) revert InvalidClass();
         if (streak % 5 == 0 && streak != 0) {
@@ -177,68 +135,69 @@ contract CheckIn is AccessControl, ICheckIn {
     }
 
     function calculatePoints(uint256 streak) private view returns (uint256) {
-        uint256 multiplier = (streak - 1) * 5 + 10; // (n-1) * 0.5 + 1
-        return basePoints * multiplier / 10;
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        uint256 multiplier = (streak - 1) * 5 + 10;
+        return cs.basePoints * multiplier / 10;
     }
 
     function upgradeUserClass(address user, uint8 _class) public onlyRole(ADMIN_ROLE) {
-        if (
-            users[user].class == 3 // Should not upgrade if already private
-                || _class > 3 || _class < 0
-        ) revert InvalidClass();
-        require(_class == users[user].class + 1, "Can only upgrade to the next class");
-        users[user].class = _class;
-        users[user].flightPoints += 10000;
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        if (cs.users[user].class == 3 || _class > 3 || _class < 0) revert InvalidClass();
+        require(_class == cs.users[user].class + 1, "Can only upgrade to the next class");
+        cs.users[user].class = _class;
+        cs.users[user].flightPoints += 10000;
     }
 
     function _adminIncrementPoints(address user, uint256 points) public onlyRole(ADMIN_ROLE) {
-        users[user].flightPoints += points;
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        cs.users[user].flightPoints += points;
     }
 
-    function incrementPoints(string memory _tokenUri, address user, bytes memory signature, uint8 tier)
-        public
-        _onlyWithAdminSign(_tokenUri, user, signature)
-    {
+    function incrementPoints(address user, uint8 tier) public _onlyGoon {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
         require(tier < 6, "Invalid tier");
         if (tier == 1) {
-            users[user].flightPoints += 30000;
+            cs.users[user].flightPoints += 30000;
         } else if (tier == 2) {
-            users[user].flightPoints += 18000;
+            cs.users[user].flightPoints += 18000;
         } else if (tier == 3) {
-            users[user].flightPoints += 12000;
+            cs.users[user].flightPoints += 12000;
         } else if (tier == 4) {
-            users[user].flightPoints += 10000;
+            cs.users[user].flightPoints += 10000;
         } else {
-            users[user].flightPoints += 8000;
+            cs.users[user].flightPoints += 8000;
         }
     }
 
     function incrementFaucetPoints(address user, string memory token) public _onlyFaucet {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        IDateTime dateTime = IDateTime(cs.dateTimeAddress);
         uint16 currentYear = dateTime.getYear(block.timestamp);
         uint8 currentMonth = dateTime.getMonth(block.timestamp);
         uint8 currentDay = dateTime.getDay(block.timestamp);
 
-        uint16 prevYear = dateTime.getYear(faucetLastClaimed[user][token]);
-        uint8 prevMonth = dateTime.getMonth(faucetLastClaimed[user][token]);
-        uint8 prevDay = dateTime.getDay(faucetLastClaimed[user][token]);
+        uint16 prevYear = dateTime.getYear(cs.faucetLastClaimed[user][token]);
+        uint8 prevMonth = dateTime.getMonth(cs.faucetLastClaimed[user][token]);
+        uint8 prevDay = dateTime.getDay(cs.faucetLastClaimed[user][token]);
 
         if (!isSameDay(prevYear, prevMonth, prevDay, currentYear, currentMonth, currentDay)) {
-            faucetLastClaimed[user][token] = block.timestamp;
-            users[user].faucetPoints += faucetPoints;
+            cs.faucetLastClaimed[user][token] = block.timestamp;
+            cs.users[user].faucetPoints += cs.faucetPoints;
             emit PointsUpdated(
                 user,
-                UserPoints(
-                    users[user].flightPoints,
-                    users[user].faucetPoints,
-                    users[user].rwaStakingPoints,
-                    users[user].oracleGamePoints
+                CheckInStorage.UserPoints(
+                    cs.users[user].flightPoints,
+                    cs.users[user].faucetPoints,
+                    cs.users[user].rwaStakingPoints,
+                    cs.users[user].oracleGamePoints
                 )
             );
         }
     }
 
-    function _adminSetUserPoints(address user, UserPoints calldata points) public onlyRole(ADMIN_ROLE) {
-        UserInfo storage userInfo = users[user];
+    function _adminSetUserPoints(address user, CheckInStorage.UserPoints calldata points) public onlyRole(ADMIN_ROLE) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        CheckInStorage.UserInfo storage userInfo = cs.users[user];
         userInfo.flightPoints = points.flightPoints;
         userInfo.faucetPoints = points.faucetPoints;
         userInfo.rwaStakingPoints = points.rwaStakingPoints;
@@ -246,37 +205,48 @@ contract CheckIn is AccessControl, ICheckIn {
     }
 
     function _adminSetUserClass(address user, uint8 _class) public onlyRole(ADMIN_ROLE) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
         if (_class > 3 || _class < 0) revert InvalidClass();
-        users[user].class = _class;
+        cs.users[user].class = _class;
     }
 
     function _adminUserReroll(address user, uint256 reroll) public onlyRole(ADMIN_ROLE) {
-        users[user].reRolls = reroll;
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        cs.users[user].reRolls = reroll;
     }
 
     function _setBasePoints(uint256 _basePoints) public onlyRole(ADMIN_ROLE) {
-        basePoints = _basePoints;
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        cs.basePoints = _basePoints;
     }
 
     function _decrementReRolls(address user) public onlyRole(ADMIN_ROLE) {
-        UserInfo storage userInfo = users[user];
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        CheckInStorage.UserInfo storage userInfo = cs.users[user];
         if (userInfo.reRolls == 0) revert NoReRollsLeft();
         userInfo.reRolls--;
     }
 
     function _adminSetUserStreak(address user, uint256 streak) public onlyRole(ADMIN_ROLE) {
-        users[user].streakCount = streak;
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        cs.users[user].streakCount = streak;
     }
 
-    // pass in all false to reset weekly checkins
     function _adminSetUserWeeklyCheckins(address user, bool[] calldata checkins) public onlyRole(ADMIN_ROLE) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
         for (uint8 i = 0; i < 7; i++) {
-            weeklyCheckIns[user][i] = checkins[i];
+            cs.weeklyCheckIns[user][i] = checkins[i];
         }
     }
 
     function _adminSetFaucetContract(address _faucet) public onlyRole(ADMIN_ROLE) {
-        faucet = _faucet;
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        cs.faucet = _faucet;
+    }
+
+    function _setGoonAddress(address _goon) public onlyRole(ADMIN_ROLE) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        cs.goon = _goon;
     }
 
     function isNextDay(
@@ -285,7 +255,8 @@ contract CheckIn is AccessControl, ICheckIn {
         uint8 lastDay,
         uint16 currentYear,
         uint8 currentMonth,
-        uint8 currentDay
+        uint8 currentDay,
+        IDateTime dateTime
     ) internal view returns (bool) {
         uint256 lastDateTimestamp = dateTime.toTimestamp(lastYear, lastMonth, lastDay);
         uint256 nextDayTimestamp = lastDateTimestamp + SECONDS_PER_DAY;
@@ -309,44 +280,145 @@ contract CheckIn is AccessControl, ICheckIn {
     }
 
     function getStreak(address user) public view returns (uint256) {
-        return users[user].streakCount;
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user].streakCount;
     }
 
-    function getReRolls(address user) public view returns (uint256) {
-        return users[user].reRolls;
+    function getPoints(address user) public view returns (CheckInStorage.UserPoints memory) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        CheckInStorage.UserInfo storage info = cs.users[user];
+        return CheckInStorage.UserPoints(
+            info.flightPoints, info.faucetPoints, info.rwaStakingPoints, info.oracleGamePoints
+        );
     }
 
-    function getUserClass(address user) public view returns (uint256) {
-        return users[user].class;
-    }
+    function getUsersPoints(address[] memory _users) public view returns (CheckInStorage.UserPoints[] memory) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        CheckInStorage.UserPoints[] memory points = new CheckInStorage.UserPoints[](_users.length);
 
-    function getPoints(address user) public view returns (UserPoints memory) {
-        UserInfo storage info = users[user];
-        return UserPoints(info.flightPoints, info.faucetPoints, info.rwaStakingPoints, info.oracleGamePoints);
-    }
-
-    function getUsersPoints(address[] memory _users) public view returns (UserPoints[] memory) {
-        UserPoints[] memory points = new UserPoints[](_users.length);
         for (uint256 i = 0; i < _users.length; i++) {
-            UserInfo storage user = users[_users[i]];
-
-            points[i] = UserPoints(user.flightPoints, user.faucetPoints, user.rwaStakingPoints, user.oracleGamePoints);
+            CheckInStorage.UserInfo storage user = cs.users[_users[i]];
+            points[i] = CheckInStorage.UserPoints(
+                user.flightPoints, user.faucetPoints, user.rwaStakingPoints, user.oracleGamePoints
+            );
         }
+
         return points;
     }
 
     function getWeeklyCheckIns(address user) public returns (bool[7] memory) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        IDateTime dateTime = IDateTime(cs.dateTimeAddress);
         uint8 currentWeek = dateTime.getWeekNumber(block.timestamp);
-        if (users[user].lastCheckInWeek != currentWeek) {
+
+        if (cs.users[user].lastCheckInWeek != currentWeek) {
             return resetWeeklyCheckIns(user);
         }
-        return weeklyCheckIns[user];
+        return cs.weeklyCheckIns[user];
     }
 
     function resetWeeklyCheckIns(address user) internal returns (bool[7] memory) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
         for (uint8 i = 0; i < 7; i++) {
-            weeklyCheckIns[user][i] = false;
+            cs.weeklyCheckIns[user][i] = false;
         }
-        return weeklyCheckIns[user];
+        return cs.weeklyCheckIns[user];
+    }
+
+    // View functions for storage variables
+
+    function getBasePoints() public view returns (uint256) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.basePoints;
+    }
+
+    function getFaucetPoints() public view returns (uint256) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.faucetPoints;
+    }
+
+    function getAdmin() public view returns (address) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.admin;
+    }
+
+    function getFaucet() public view returns (address) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.faucet;
+    }
+
+    function getGoon() public view returns (address) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.goon;
+    }
+
+    function getDateTimeAddress() public view returns (address) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.dateTimeAddress;
+    }
+
+    function getFaucetLastClaimed(address user, string memory token) public view returns (uint256) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.faucetLastClaimed[user][token];
+    }
+
+    function getUserInfo(address user) public view returns (CheckInStorage.UserInfo memory) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user];
+    }
+
+    function getUserClass(address user) public view returns (uint8) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user].class;
+    }
+
+    function getLastCheckinYear(address user) public view returns (uint16) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user].lastCheckinYear;
+    }
+
+    function getLastCheckinMonth(address user) public view returns (uint8) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user].lastCheckinMonth;
+    }
+
+    function getLastCheckinDay(address user) public view returns (uint8) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user].lastCheckinDay;
+    }
+
+    function getLastCheckInWeek(address user) public view returns (uint8) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user].lastCheckInWeek;
+    }
+
+    function getStreakCount(address user) public view returns (uint256) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user].streakCount;
+    }
+
+    function getReRolls(address user) public view returns (uint256) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user].reRolls;
+    }
+
+    function getFlightPoints(address user) public view returns (uint256) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user].flightPoints;
+    }
+
+    function getFaucetPoints(address user) public view returns (uint256) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user].faucetPoints;
+    }
+
+    function getRwaStakingPoints(address user) public view returns (uint256) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user].rwaStakingPoints;
+    }
+
+    function getOracleGamePoints(address user) public view returns (uint256) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        return cs.users[user].oracleGamePoints;
     }
 }

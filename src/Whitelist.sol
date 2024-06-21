@@ -1,48 +1,78 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.14;
+pragma solidity ^0.8.20;
 
-import "@openzeppelin-contracts/access/AccessControl.sol";
+import "@openzeppelin-contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin-contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "./WhitelistStorage.sol";
 import "./interfaces/IWhitelist.sol";
 
 error AlreadyClaimed();
 error InvalidWhitelist();
 
-contract Whitelist is IWhitelist, AccessControl {
-    bytes32 public constant WHITELIST_ADMIN_ROLE = keccak256("WHITELIST_ADMIN_ROLE");
-    mapping(address => bool) public whitelist;
-    mapping(uint256 => uint256) private claimedBitMap;
+contract Whitelist is Initializable, AccessControlUpgradeable, UUPSUpgradeable, IWhitelist {
+    using WhitelistStorage for WhitelistStorage.Storage;
 
-    constructor() {
-        _grantRole(WHITELIST_ADMIN_ROLE, msg.sender);
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+
+    function initialize(address admin) public initializer {
+        __AccessControl_init();
+        __UUPSUpgradeable_init();
+
+        _grantRole(WhitelistStorage.WHITELIST_ADMIN_ROLE, admin);
+        _grantRole(UPGRADER_ROLE, admin);
     }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
 
     // Single address
-    function addAddressToWhitelist(address addressToAdd) external override onlyRole(WHITELIST_ADMIN_ROLE) {
-        whitelist[addressToAdd] = true;
+    function addAddressToWhitelist(address addressToAdd)
+        external
+        override
+        onlyRole(WhitelistStorage.WHITELIST_ADMIN_ROLE)
+    {
+        WhitelistStorage.Storage storage ws = WhitelistStorage.getStorage();
+        ws.whitelist[addressToAdd] = true;
     }
 
-    function removeAddressFromWhitelist(address addressToRemove) external override onlyRole(WHITELIST_ADMIN_ROLE) {
-        delete whitelist[addressToRemove];
+    function removeAddressFromWhitelist(address addressToRemove)
+        external
+        override
+        onlyRole(WhitelistStorage.WHITELIST_ADMIN_ROLE)
+    {
+        WhitelistStorage.Storage storage ws = WhitelistStorage.getStorage();
+        delete ws.whitelist[addressToRemove];
     }
 
     // Batch address
-    function addToWhitelist(address[] calldata addresses) external override onlyRole(WHITELIST_ADMIN_ROLE) {
+    function addToWhitelist(address[] calldata addresses)
+        external
+        override
+        onlyRole(WhitelistStorage.WHITELIST_ADMIN_ROLE)
+    {
+        WhitelistStorage.Storage storage ws = WhitelistStorage.getStorage();
         for (uint256 i = 0; i < addresses.length; i++) {
-            whitelist[addresses[i]] = true;
+            ws.whitelist[addresses[i]] = true;
         }
     }
 
-    function removeFromWhitelist(address[] calldata addresses) external override onlyRole(WHITELIST_ADMIN_ROLE) {
+    function removeFromWhitelist(address[] calldata addresses)
+        external
+        override
+        onlyRole(WhitelistStorage.WHITELIST_ADMIN_ROLE)
+    {
+        WhitelistStorage.Storage storage ws = WhitelistStorage.getStorage();
         for (uint256 i = 0; i < addresses.length; i++) {
-            delete whitelist[addresses[i]];
+            delete ws.whitelist[addresses[i]];
         }
     }
 
     // Claim
     function isClaimed(uint256 index) public view override returns (bool) {
+        WhitelistStorage.Storage storage ws = WhitelistStorage.getStorage();
         uint256 claimedWordIndex = index / 256;
         uint256 claimedBitIndex = index % 256;
-        uint256 claimedWord = claimedBitMap[claimedWordIndex];
+        uint256 claimedWord = ws.claimedBitMap[claimedWordIndex];
         uint256 mask = (1 << claimedBitIndex);
         return claimedWord & mask == mask;
     }
@@ -55,13 +85,30 @@ contract Whitelist is IWhitelist, AccessControl {
 
     // Whitelist checking
     function isWhitelisted(address account) public view override returns (bool) {
-        return whitelist[account];
+        WhitelistStorage.Storage storage ws = WhitelistStorage.getStorage();
+        return ws.whitelist[account];
     }
 
     // Private helper to mark an index as claimed
     function _setClaimed(uint256 index) private {
+        WhitelistStorage.Storage storage ws = WhitelistStorage.getStorage();
         uint256 claimedWordIndex = index / 256;
         uint256 claimedBitIndex = index % 256;
-        claimedBitMap[claimedWordIndex] |= (1 << claimedBitIndex);
+        ws.claimedBitMap[claimedWordIndex] |= (1 << claimedBitIndex);
+    }
+
+    // View functions for storage variables
+    function getWhitelistStatus(address account) public view returns (bool) {
+        WhitelistStorage.Storage storage ws = WhitelistStorage.getStorage();
+        return ws.whitelist[account];
+    }
+
+    function getClaimedBitMap(uint256 index) public view returns (uint256) {
+        WhitelistStorage.Storage storage ws = WhitelistStorage.getStorage();
+        return ws.claimedBitMap[index];
+    }
+
+    function getClaimedStatus(uint256 index) public view returns (bool) {
+        return isClaimed(index);
     }
 }
