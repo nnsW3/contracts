@@ -182,12 +182,12 @@ contract OracleGame is Initializable, UUPSUpgradeable, AccessControlUpgradeable 
     }
 
     // View functions for storage variables
-    function getOracle() public view returns (address) {
+    function oracle() public view returns (address) {
         OracleGameStorage.Storage storage s = OracleGameStorage.getStorage();
         return address(s.oracle);
     }
 
-    function getStartTime() public view returns (uint256) {
+    function startTime() public view returns (uint256) {
         OracleGameStorage.Storage storage s = OracleGameStorage.getStorage();
         return s.startTime;
     }
@@ -197,37 +197,42 @@ contract OracleGame is Initializable, UUPSUpgradeable, AccessControlUpgradeable 
         return s.allPairs;
     }
 
-    function getCurrentPairIndex() public view returns (int256) {
+    function allPairs(uint256 index) public view returns (uint256) {
+        OracleGameStorage.Storage storage s = OracleGameStorage.getStorage();
+        return s.allPairs[index];
+    }
+
+    function currentPairIndex() public view returns (int256) {
         OracleGameStorage.Storage storage s = OracleGameStorage.getStorage();
         return s.currentPairIndex;
     }
 
-    function getPairDuration() public view returns (uint256) {
+    function pairDuration() public view returns (uint256) {
         OracleGameStorage.Storage storage s = OracleGameStorage.getStorage();
         return s.pairDuration;
     }
 
-    function getGuessWaitTime() public view returns (uint256) {
+    function guessWaitTime() public view returns (uint256) {
         OracleGameStorage.Storage storage s = OracleGameStorage.getStorage();
         return s.guessWaitTime;
     }
 
-    function getUserPoints(address user) public view returns (uint256) {
+    function userPoints(address user) public view returns (uint256) {
         OracleGameStorage.Storage storage s = OracleGameStorage.getStorage();
         return s.userPoints[user];
     }
 
-    function getUserParticipated(address user) public view returns (bool) {
+    function userParticipated(address user) public view returns (bool) {
         OracleGameStorage.Storage storage s = OracleGameStorage.getStorage();
         return s.userParticipated[user];
     }
 
-    function getFirstGuesser(uint256 pair) public view returns (address) {
+    function firstGuesser(uint256 pair) public view returns (address) {
         OracleGameStorage.Storage storage s = OracleGameStorage.getStorage();
         return s.priceGuesses[pair].firstGuesser;
     }
 
-    function getLastGuesser(uint256 pair) public view returns (address) {
+    function lastGuesser(uint256 pair) public view returns (address) {
         OracleGameStorage.Storage storage s = OracleGameStorage.getStorage();
         return s.priceGuesses[pair].lastGuesser;
     }

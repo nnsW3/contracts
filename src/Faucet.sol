@@ -35,7 +35,7 @@ contract Faucet is Initializable, UUPSUpgradeable {
         FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
         fs.admin = _admin;
         fs.etherAmount = 0.001 ether;
-        fs.tokenAmount = 1000;
+        fs.tokenAmount = 1;
         fs.checkIn = ICheckIn(checkInContract);
 
         bytes32 ethHash = keccak256(abi.encodePacked("ETH"));
