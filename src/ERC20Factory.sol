@@ -2,8 +2,8 @@
 pragma solidity 0.8.25;
 
 import {ERC20Token} from "./ERC20Token.sol";
-import {Ownable} from "@openzeppelin-contracts/access/Ownable.sol";
-import {ERC1967Proxy} from "@openzeppelin-contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract ERC20Factory is Ownable {
     address public implementationAddress;
