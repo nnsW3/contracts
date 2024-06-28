@@ -10,7 +10,7 @@ import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-contract P is
+contract stRWA is
     Initializable,
     AccessControlUpgradeable,
     ERC20Upgradeable,
@@ -32,14 +32,14 @@ contract P is
     }
 
     function initialize(address admin) public initializer {
-        __ERC20_init("Plume", "P");
+        __ERC20_init("Plume Staked RWA Yield", "stRWA");
         __ERC20Burnable_init();
         __ERC20Pausable_init();
         __AccessControl_init();
         __UUPSUpgradeable_init();
 
-        _name = "Plume";
-        _symbol = "P";
+        _name = "Plume Staked RWA Yield";
+        _symbol = "stRWA";
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ADMIN_ROLE, admin);

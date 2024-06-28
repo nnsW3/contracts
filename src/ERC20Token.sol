@@ -34,6 +34,7 @@ contract ERC20Token is
     bytes32 constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     uint8 private _decimals;
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
