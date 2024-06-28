@@ -157,15 +157,15 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
         CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
         require(tier < 6, "Invalid tier");
         if (tier == 1) {
-            cs.users[user].flightPoints += 30000;
+            cs.users[user].flightPoints += 8000;
         } else if (tier == 2) {
-            cs.users[user].flightPoints += 18000;
+            cs.users[user].flightPoints += 10000;
         } else if (tier == 3) {
             cs.users[user].flightPoints += 12000;
         } else if (tier == 4) {
-            cs.users[user].flightPoints += 10000;
+            cs.users[user].flightPoints += 18000;
         } else {
-            cs.users[user].flightPoints += 8000;
+            cs.users[user].flightPoints += 30000;
         }
     }
 
