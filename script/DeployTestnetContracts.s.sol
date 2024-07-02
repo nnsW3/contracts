@@ -9,6 +9,7 @@ import {OracleGame} from "../src/OracleGame.sol";
 import {PlumeGoon} from "../src/PlumeGoon.sol";
 import {Whitelist} from "../src/Whitelist.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {CheckInStorage} from "../src/CheckInStorage.sol";
 
 contract DeployScript is Script {
     address private constant ADMIN_ADDRESS = 0x91D8c1dC4eD9D34300e8351435A598798f958e4F;
@@ -21,14 +22,14 @@ contract DeployScript is Script {
     uint256[] private pairs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
 
     function run() external {
-        vm.startBroadcast(0x91D8c1dC4eD9D34300e8351435A598798f958e4F);
+        vm.startBroadcast(ADMIN_ADDRESS);
 
         DateTime dateTime = new DateTime();
         console.log("DateTime deployed to:", address(dateTime));
 
         address checkInProxy = Upgrades.deployUUPSProxy(
             "CheckIn.sol",
-            abi.encodeCall(CheckIn.initialize, (msg.sender, address(dateTime), address(dateTime)))
+            abi.encodeCall(CheckIn.initialize, (msg.sender, address(dateTime), address(dateTime), address(dateTime)))
         );
         console.log("CheckIn deployed to:", checkInProxy);
 
@@ -40,7 +41,9 @@ contract DeployScript is Script {
 
         CheckIn checkIn = CheckIn(checkInProxy);
         Faucet faucet = Faucet(payable(faucetProxy));
-        checkIn._adminSetFaucetContract(faucetProxy);
+        checkIn._adminSetContract(CheckInStorage.Task.FAUCET_ETH, faucetProxy);
+        checkIn._adminSetContract(CheckInStorage.Task.FAUCET_P, faucetProxy);
+        checkIn._adminSetContract(CheckInStorage.Task.FAUCET_USDC, faucetProxy);
         faucet.transferAdmin(FAUCET_ADMIN_ADDRESS);
 
         address oracleGameProxy = Upgrades.deployUUPSProxy(

@@ -5,4 +5,5 @@ interface ICheckIn {
     function getReRolls(address user) external view returns (uint256);
     function incrementPoints(address user, uint8 tier) external;
     function incrementFaucetPoints(address user, string memory token) external;
+    function incrementTaskPoints(address user, uint256 task) external;
 }
