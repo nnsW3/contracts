@@ -28,14 +28,13 @@ contract Faucet is Initializable, UUPSUpgradeable {
         address[] memory tokenAddresses
     ) public initializer {
         require(_admin != address(0), "Admin address must not be empty");
-        require(checkInContract != address(0), "CheckIn contract address must not be empty");
         require(tokenNames.length > 0, "Token names must not be empty");
         require(tokenNames.length == tokenAddresses.length, "Length of token names and addresses must be equal");
 
         FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
         fs.admin = _admin;
         fs.etherAmount = 0.001 ether;
-        fs.tokenAmount = 1;
+        fs.tokenAmount = 1000;
         fs.checkIn = ICheckIn(checkInContract);
 
         bytes32 ethHash = keccak256(abi.encodePacked("ETH"));
@@ -92,7 +91,9 @@ contract Faucet is Initializable, UUPSUpgradeable {
 
         emit TokenSent(msg.sender, amount, token);
 
-        fs.checkIn.incrementFaucetPoints(msg.sender, token);
+        if (address(fs.checkIn) != address(0)) {
+            fs.checkIn.incrementFaucetPoints(msg.sender, token);
+        }
     }
 
     function transferAdmin(address newAdmin) external onlyAdmin {
