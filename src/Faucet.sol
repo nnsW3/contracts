@@ -139,6 +139,16 @@ contract Faucet is Initializable, UUPSUpgradeable {
         emit Withdrawn(recipient, amount, token);
     }
 
+    function addNewToken(string calldata tokenName, address tokenAddress) external onlyAdmin {
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+
+        if (keccak256(bytes(tokenName)) == keccak256(bytes("ETH"))) {
+            fs.tokens[tokenName] = ETH_ADDRESS;
+        } else {
+            fs.tokens[tokenName] = tokenAddress;
+        }
+    }
+
     // View functions for storage variables
 
     function getAdmin() public view returns (address) {
