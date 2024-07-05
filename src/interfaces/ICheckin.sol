@@ -6,4 +6,5 @@ interface ICheckIn {
     function incrementPoints(address user, uint8 tier) external;
     function incrementFaucetPoints(address user, string memory token) external;
     function incrementTaskPoints(address user, uint256 task) external;
+    function incrementNestPoints(address user, uint256 amount) external;
 }

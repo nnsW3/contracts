@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.14;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
@@ -11,6 +11,7 @@ import "./CheckInStorage.sol";
 
 error NoReRollsLeft();
 error InvalidClass();
+error CheckedInMoreThanOnce();
 
 contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
     using CheckInStorage for CheckInStorage.Storage;
@@ -22,7 +23,7 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
     event PointsUpdated(address indexed user, CheckInStorage.UserPoints points);
     event TaskPointsUpdated(address indexed user, uint256[] taskPoints);
 
-    function initialize(address _admin, address _dateTimeAddress, address _faucetAddress, address _swapAddress) public initializer {
+    function initialize(address _admin, address _dateTimeAddress, address _faucetAddress) public initializer {
         __AccessControl_init();
         __UUPSUpgradeable_init();
 
@@ -33,17 +34,29 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
         cs.dateTimeAddress = _dateTimeAddress;
         cs.faucet = _faucetAddress;
 
+        _grantRole(ADMIN_ROLE, _admin);
+    }
+
+    function reinitialize(address _faucetAddress, address _stakingAddress, address _swapAddress) public reinitializer(2) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+
         cs.taskBasePoints[CheckInStorage.Task.FAUCET_ETH] = 5000;
-        cs.taskBasePoints[CheckInStorage.Task.FAUCET_P] = 5000;
+        cs.taskBasePoints[CheckInStorage.Task.FAUCET_GOON] = 5000;
         cs.taskBasePoints[CheckInStorage.Task.FAUCET_USDC] = 5000;
+        cs.taskBasePoints[CheckInStorage.Task.NEST] = 5000;
         cs.taskBasePoints[CheckInStorage.Task.AMBIENT] = 5000;
 
         cs.taskContractAddresses[CheckInStorage.Task.FAUCET_ETH] = _faucetAddress;
-        cs.taskContractAddresses[CheckInStorage.Task.FAUCET_P] = _faucetAddress;
+        cs.taskContractAddresses[CheckInStorage.Task.FAUCET_GOON] = _faucetAddress;
         cs.taskContractAddresses[CheckInStorage.Task.FAUCET_USDC] = _faucetAddress;
+        cs.taskContractAddresses[CheckInStorage.Task.NEST] = _stakingAddress;
         cs.taskContractAddresses[CheckInStorage.Task.AMBIENT] = _swapAddress;
 
-        _grantRole(ADMIN_ROLE, _admin);
+        cs.taskRefreshHours[CheckInStorage.Task.FAUCET_ETH] = 24;
+        cs.taskRefreshHours[CheckInStorage.Task.FAUCET_GOON] = 24;
+        cs.taskRefreshHours[CheckInStorage.Task.FAUCET_USDC] = 24;
+        cs.taskRefreshHours[CheckInStorage.Task.NEST] = 0;
+        cs.taskRefreshHours[CheckInStorage.Task.AMBIENT] = 24;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(ADMIN_ROLE) {}
@@ -79,8 +92,9 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
             resetWeeklyCheckIns(msg.sender);
         }
 
-        if (userInfo.streakCount == 0) {
-            userInfo.streakCount = 1;
+        uint256 streakCount = userInfo.streakCount;
+        if (streakCount == 0) {
+            streakCount = 1;
         } else {
             if (
                 isNextDay(
@@ -93,9 +107,9 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
                     dateTime
                 )
             ) {
-                userInfo.streakCount++;
+                streakCount++;
             } else if (
-                !isSameDay(
+                isSameDay(
                     userInfo.lastCheckinYear,
                     userInfo.lastCheckinMonth,
                     userInfo.lastCheckinDay,
@@ -104,18 +118,23 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
                     currentDay
                 )
             ) {
-                userInfo.streakCount = 1;
+                revert CheckedInMoreThanOnce();
+            } else {
+                streakCount = 1;
             }
         }
 
+        _setTaskPoints(msg.sender);
+
+        userInfo.streakCount = streakCount;
         userInfo.lastCheckinYear = currentYear;
         userInfo.lastCheckinMonth = currentMonth;
         userInfo.lastCheckinDay = currentDay;
-        userInfo.reRolls += calculateReRolls(userInfo.class, userInfo.streakCount);
-        cs.weeklyCheckIns[msg.sender][currentWeekday - 1] = true;
         userInfo.lastCheckInWeek = currentWeek;
+        userInfo.reRolls += calculateReRolls(userInfo.class, streakCount);
+        cs.weeklyCheckIns[msg.sender][currentWeekday - 1] = true;
 
-        uint256 checkInIncrement = calculatePoints(userInfo.streakCount);
+        uint256 checkInIncrement = calculatePoints(streakCount);
         userInfo.flightPoints += checkInIncrement;
         emit PointsUpdated(
             msg.sender,
@@ -126,14 +145,7 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
 
         emit CheckInEvent(msg.sender, currentYear, currentMonth, currentDay);
 
-        userInfo.taskPoints[CheckInStorage.Task.CHECK_IN] += checkInIncrement;
-        userInfo.lastClaimed[CheckInStorage.Task.CHECK_IN] = block.timestamp;
-        uint256 tasksLength = uint256(type(CheckInStorage.Task).max) + 1;
-        uint256[] memory taskPoints = new uint256[](tasksLength);
-        for (uint256 i = 0; i < tasksLength; i++) {
-            taskPoints[i] = userInfo.taskPoints[CheckInStorage.Task(i)];
-        }
-        emit TaskPointsUpdated(msg.sender, taskPoints);
+        _incrementTaskPoints(msg.sender, CheckInStorage.Task.FLIGHT, checkInIncrement);
     }
 
     // Class    | Rerolls
@@ -163,34 +175,50 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
 
     function upgradeUserClass(address user, uint8 _class) public onlyRole(ADMIN_ROLE) {
         CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
-        if (cs.users[user].class == 3 || _class > 3 || _class < 0) revert InvalidClass();
-        require(_class == cs.users[user].class + 1, "Can only upgrade to the next class");
-        cs.users[user].class = _class;
-        cs.users[user].flightPoints += 10000;
+        CheckInStorage.UserInfo storage userInfo = cs.users[user];
+
+        _setTaskPoints(user);
+
+        if (_class != userInfo.class + 1 || _class > 3) revert InvalidClass();
+        userInfo.class = _class;
+        userInfo.flightPoints += 10000;
+
+        _incrementTaskPoints(user, CheckInStorage.Task.FLIGHT, 10000);
     }
 
     function _adminIncrementPoints(address user, uint256 points) public onlyRole(ADMIN_ROLE) {
         CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+
+        _setTaskPoints(user);
         cs.users[user].flightPoints += points;
+        _incrementTaskPoints(user, CheckInStorage.Task.FLIGHT, points);
     }
 
     function incrementPoints(address user, uint8 tier) public _onlyGoon {
         CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        uint256 amount = 0;
+
         require(tier < 6, "Invalid tier");
         if (tier == 1) {
-            cs.users[user].flightPoints += 8000;
+            amount = 8000;
         } else if (tier == 2) {
-            cs.users[user].flightPoints += 10000;
+            amount = 10000;
         } else if (tier == 3) {
-            cs.users[user].flightPoints += 12000;
+            amount = 12000;
         } else if (tier == 4) {
-            cs.users[user].flightPoints += 18000;
+            amount = 18000;
         } else {
-            cs.users[user].flightPoints += 30000;
+            amount = 30000;
         }
+
+        _setTaskPoints(user);
+        cs.users[user].flightPoints += amount;
+        _incrementTaskPoints(user, CheckInStorage.Task.FLIGHT, amount);
     }
 
     function incrementFaucetPoints(address user, string memory token) public _onlyFaucet {
+        _setTaskPoints(user);
+
         CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
         IDateTime dateTime = IDateTime(cs.dateTimeAddress);
         uint16 currentYear = dateTime.getYear(block.timestamp);
@@ -214,40 +242,73 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
                 )
             );
 
-            uint256 tasksLength = uint256(type(CheckInStorage.Task).max) + 1;
-            uint256[] memory taskPoints = new uint256[](tasksLength);
-            for (uint256 i = 0; i < tasksLength; i++) {
-                taskPoints[i] = cs.users[user].taskPoints[CheckInStorage.Task(i)];
-            }
-            emit TaskPointsUpdated(user, taskPoints);
+            _incrementTaskPoints(user, CheckInStorage.Task.FAUCET_ETH, cs.taskBasePoints[CheckInStorage.Task.FAUCET_ETH]);
         }
     }
 
     function incrementTaskPoints(address user, CheckInStorage.Task task) public {
         CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+
         require(msg.sender == cs.taskContractAddresses[task], "Only allowed smart contract can call this function");
+
+        uint256 refreshHours = cs.taskRefreshHours[task];
+        uint256 lastClaimed = cs.users[user].lastClaimed[task];
+
+        if (refreshHours == 0 && lastClaimed == 0) {
+            _incrementTaskPoints(user, task, cs.taskBasePoints[task]);
+            return;
+        }
 
         IDateTime dateTime = IDateTime(cs.dateTimeAddress);
         uint16 currentYear = dateTime.getYear(block.timestamp);
         uint8 currentMonth = dateTime.getMonth(block.timestamp);
         uint8 currentDay = dateTime.getDay(block.timestamp);
 
-        uint256 lastClaimed = cs.users[user].lastClaimed[task];
         uint16 prevYear = dateTime.getYear(lastClaimed);
         uint8 prevMonth = dateTime.getMonth(lastClaimed);
         uint8 prevDay = dateTime.getDay(lastClaimed);
 
-        if (!isSameDay(prevYear, prevMonth, prevDay, currentYear, currentMonth, currentDay)) {
-            cs.users[user].lastClaimed[task] = block.timestamp;
-            cs.users[user].taskPoints[task] += cs.taskBasePoints[task];
-
-            uint256 tasksLength = uint256(type(CheckInStorage.Task).max) + 1;
-            uint256[] memory taskPoints = new uint256[](tasksLength);
-            for (uint256 i = 0; i < tasksLength; i++) {
-                taskPoints[i] = cs.users[user].taskPoints[CheckInStorage.Task(i)];
-            }
-            emit TaskPointsUpdated(user, taskPoints);
+        if (refreshHours == 24 && !isSameDay(prevYear, prevMonth, prevDay, currentYear, currentMonth, currentDay)) {
+            _incrementTaskPoints(user, task, cs.taskBasePoints[task]);
         }
+        // TODO: call _incrementTaskPoints for refreshHours == 4
+    }
+
+    function incrementNestPoints(address user, uint256 amount) external {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+
+        require(msg.sender == cs.taskContractAddresses[CheckInStorage.Task.NEST], "Only Nest smart contract can call this function");
+
+        _incrementTaskPoints(user, CheckInStorage.Task.NEST, amount);
+    }
+
+    function _setTaskPoints(address user) internal {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        CheckInStorage.UserInfo storage userInfo = cs.users[user];
+
+        // Code is not gas-optimized, but we'll delete this function later
+        if (userInfo.flightPoints >= userInfo.taskPoints[CheckInStorage.Task.FLIGHT]
+            || userInfo.faucetPoints >= userInfo.taskPoints[CheckInStorage.Task.FAUCET_ETH]
+            || userInfo.rwaStakingPoints >= userInfo.taskPoints[CheckInStorage.Task.NEST]
+            || userInfo.oracleGamePoints >= userInfo.taskPoints[CheckInStorage.Task.SUPRA]
+        ) {
+            userInfo.taskPoints[CheckInStorage.Task.FLIGHT] = userInfo.flightPoints;
+            userInfo.taskPoints[CheckInStorage.Task.FAUCET_ETH] = userInfo.faucetPoints;
+            userInfo.taskPoints[CheckInStorage.Task.NEST] = userInfo.rwaStakingPoints;
+            userInfo.taskPoints[CheckInStorage.Task.SUPRA] = userInfo.oracleGamePoints;
+            userInfo.lastClaimed[CheckInStorage.Task.FAUCET_ETH] = cs.faucetLastClaimed[user]["ETH"];
+            userInfo.lastClaimed[CheckInStorage.Task.FAUCET_GOON] = cs.faucetLastClaimed[user]["P"];
+            userInfo.lastClaimed[CheckInStorage.Task.FAUCET_USDC] = cs.faucetLastClaimed[user]["USDC"];
+        }
+    }
+
+    function _incrementTaskPoints(address user, CheckInStorage.Task task, uint256 amount) internal {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+
+        cs.users[user].taskPoints[task] += amount;
+        cs.users[user].lastClaimed[task] = block.timestamp;
+
+        emit TaskPointsUpdated(user, getTaskPoints(user));
     }
 
     function _adminSetUserPoints(address user, CheckInStorage.UserPoints calldata points) public onlyRole(ADMIN_ROLE) {
@@ -257,14 +318,16 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
         userInfo.faucetPoints = points.faucetPoints;
         userInfo.rwaStakingPoints = points.rwaStakingPoints;
         userInfo.oracleGamePoints = points.oracleGamePoints;
+
+        _setTaskPoints(user);
     }
     
     function _adminSetUserTaskPoints(address user, uint256[] calldata taskPoints) public onlyRole(ADMIN_ROLE) {
         CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
-        CheckInStorage.UserInfo storage userInfo = cs.users[user];
         for (uint256 i = 0; i < taskPoints.length; i++) {
-            userInfo.taskPoints[CheckInStorage.Task(i)] = taskPoints[i];
+            cs.users[user].taskPoints[CheckInStorage.Task(i)] = taskPoints[i];
         }
+        _incrementTaskPoints(user, CheckInStorage.Task.FLIGHT, 0);
     }
 
     function _adminSetUserClass(address user, uint8 _class) public onlyRole(ADMIN_ROLE) {
@@ -376,12 +439,9 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
     function getTaskPoints(address user) public view returns (uint256[] memory) {
         CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
         uint256 tasksLength = uint256(type(CheckInStorage.Task).max) + 1;
-
-        CheckInStorage.UserInfo storage userInfo = cs.users[user];
         uint256[] memory taskPoints = new uint256[](tasksLength);
-
         for (uint256 i = 0; i < tasksLength; i++) {
-            taskPoints[i] = userInfo.taskPoints[CheckInStorage.Task(i)];
+            taskPoints[i] = cs.users[user].taskPoints[CheckInStorage.Task(i)];
         }
         return taskPoints;
     }
@@ -392,10 +452,9 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
         uint256[][] memory res = new uint256[][](_users.length);
 
         for (uint i = 0; i < _users.length; i++) {
-            CheckInStorage.UserInfo storage userInfo = cs.users[_users[i]];
             uint256[] memory taskPoints = new uint256[](tasksLength);
             for (uint256 j = 0; j < tasksLength; j++) {
-                taskPoints[j] = userInfo.taskPoints[CheckInStorage.Task(j)];
+                taskPoints[j] = cs.users[_users[i]].taskPoints[CheckInStorage.Task(j)];
             }
             res[i] = taskPoints;
         }
@@ -405,11 +464,9 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
     function getTaskLastClaimed(address user) public view returns (uint256[] memory) {
         CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
         uint256 tasksLength = uint256(type(CheckInStorage.Task).max) + 1;
-
-        CheckInStorage.UserInfo storage userInfo = cs.users[user];
         uint256[] memory lastClaimed = new uint256[](tasksLength);
         for (uint256 i = 0; i < tasksLength; i++) {
-            lastClaimed[i] = userInfo.lastClaimed[CheckInStorage.Task(i)];
+            lastClaimed[i] = cs.users[user].taskPoints[CheckInStorage.Task(i)];
         }
         return lastClaimed;
     }
@@ -420,10 +477,9 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
         uint256[][] memory res = new uint256[][](_users.length);
 
         for (uint i = 0; i < _users.length; i++) {
-            CheckInStorage.UserInfo storage userInfo = cs.users[_users[i]];
             uint256[] memory lastClaimed = new uint256[](tasksLength);
             for (uint256 j = 0; j < tasksLength; j++) {
-                lastClaimed[j] = userInfo.lastClaimed[CheckInStorage.Task(j)];
+                lastClaimed[j] = cs.users[_users[i]].lastClaimed[CheckInStorage.Task(j)];
             }
             res[i] = lastClaimed;
         }
@@ -500,21 +556,13 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
         CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
         CheckInStorage.UserInfo storage userInfo = cs.users[user];
 
-        uint256 tasksLength = uint256(type(CheckInStorage.Task).max) + 1;
-        uint256[] memory taskPoints = new uint256[](tasksLength);
-        uint256[] memory lastClaimed = new uint256[](tasksLength);
-        for (uint256 i = 0; i < tasksLength; i++) {
-            taskPoints[i] = userInfo.taskPoints[CheckInStorage.Task(i)];
-            lastClaimed[i] = userInfo.lastClaimed[CheckInStorage.Task(i)];
-        }
-
         return CheckInStorage.UserData(
             userInfo.class,
             userInfo.streakCount,
             userInfo.reRolls,
             cs.weeklyCheckIns[user],
-            taskPoints,
-            lastClaimed
+            getTaskPoints(user),
+            getTaskLastClaimed(user)
         );
     }
 

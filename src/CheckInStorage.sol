@@ -1,13 +1,13 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.14;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.25;
 
 library CheckInStorage {
     enum Task {
-        CHECK_IN,
+        FLIGHT,
         FAUCET_ETH,
-        FAUCET_P,
+        FAUCET_GOON,
         FAUCET_USDC,
-        RWA_STAKING,
+        NEST,
         RWA_LAUNCHER,
         AMBIENT,
         SUPRA,
@@ -61,17 +61,16 @@ library CheckInStorage {
     struct Storage {
         uint256 basePoints;
         uint256 faucetPoints;
-        uint256 swapPoints;
         address admin;
         address faucet;
         address goon;
-        address swap;
         mapping(address => mapping(string => uint256)) faucetLastClaimed;
         mapping(address => UserInfo) users;
         mapping(address => bool[7]) weeklyCheckIns;
         address dateTimeAddress;
         mapping(Task => uint256) taskBasePoints;
         mapping(Task => address) taskContractAddresses;
+        mapping(Task => uint256) taskRefreshHours;
     }
 
     function getStorage() internal pure returns (Storage storage cs) {

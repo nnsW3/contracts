@@ -29,7 +29,7 @@ contract DeployScript is Script {
 
         address checkInProxy = Upgrades.deployUUPSProxy(
             "CheckIn.sol",
-            abi.encodeCall(CheckIn.initialize, (msg.sender, address(dateTime), address(dateTime), address(dateTime)))
+            abi.encodeCall(CheckIn.initialize, (msg.sender, address(dateTime), address(dateTime)))
         );
         console.log("CheckIn deployed to:", checkInProxy);
 
@@ -42,7 +42,7 @@ contract DeployScript is Script {
         CheckIn checkIn = CheckIn(checkInProxy);
         Faucet faucet = Faucet(payable(faucetProxy));
         checkIn._adminSetContract(CheckInStorage.Task.FAUCET_ETH, faucetProxy);
-        checkIn._adminSetContract(CheckInStorage.Task.FAUCET_P, faucetProxy);
+        checkIn._adminSetContract(CheckInStorage.Task.FAUCET_GOON, faucetProxy);
         checkIn._adminSetContract(CheckInStorage.Task.FAUCET_USDC, faucetProxy);
         faucet.transferAdmin(FAUCET_ADMIN_ADDRESS);
 
