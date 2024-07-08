@@ -14,7 +14,14 @@ contract DeployScript is Script {
         Upgrades.upgradeProxy(
             0x8ab5808B9A470Bae488aBab33A358a7108A4871F,
             "CheckIn.sol",
-            abi.encodeCall(CheckIn.reinitialize, (0x075e2D02EBcea5dbcE6b7C9F3D203613c0D5B33B, 0x075e2D02EBcea5dbcE6b7C9F3D203613c0D5B33B, 0x075e2D02EBcea5dbcE6b7C9F3D203613c0D5B33B))
+            abi.encodeCall(
+                CheckIn.reinitialize,
+                (
+                    0x075e2D02EBcea5dbcE6b7C9F3D203613c0D5B33B,
+                    0x075e2D02EBcea5dbcE6b7C9F3D203613c0D5B33B,
+                    0x075e2D02EBcea5dbcE6b7C9F3D203613c0D5B33B
+                )
+            )
         );
 
         vm.stopBroadcast();

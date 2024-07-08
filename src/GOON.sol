@@ -10,7 +10,7 @@ import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-contract goonUSD is
+contract GOON is
     Initializable,
     AccessControlUpgradeable,
     ERC20Upgradeable,
@@ -32,14 +32,14 @@ contract goonUSD is
     }
 
     function initialize(address admin) public initializer {
-        __ERC20_init("Plume USD Stablecoin", "goonUSD");
+        __ERC20_init("Goon Testnet Token", "GOON");
         __ERC20Burnable_init();
         __ERC20Pausable_init();
         __AccessControl_init();
         __UUPSUpgradeable_init();
 
-        _name = "Plume USD Stablecoin";
-        _symbol = "goonUSD";
+        _name = "Goon Testnet Token";
+        _symbol = "GOON";
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ADMIN_ROLE, admin);

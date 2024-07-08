@@ -3,8 +3,8 @@ pragma solidity ^0.8.25;
 
 import "forge-std/Script.sol";
 import {goonUSD} from "../src/goonUSD.sol";
-import {P} from "../src/P.sol";
-import {stRWA} from "../src/stRWA.sol";
+import {GOON} from "../src/GOON.sol";
+import {NEST} from "../src/NEST.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract DeployScript is Script {
@@ -13,23 +13,14 @@ contract DeployScript is Script {
     function run() external {
         vm.startBroadcast(ADMIN_ADDRESS);
 
-        address pProxy = Upgrades.deployUUPSProxy(
-            "P.sol",
-            abi.encodeCall(P.initialize, (msg.sender))
-        );
-        console.log("P deployed to:", pProxy);
+        address goonProxy = Upgrades.deployUUPSProxy("GOON.sol", abi.encodeCall(GOON.initialize, (msg.sender)));
+        console.log("GOON deployed to:", goonProxy);
 
-        address goonUSDProxy = Upgrades.deployUUPSProxy(
-            "goonUSD.sol",
-            abi.encodeCall(goonUSD.initialize, (msg.sender))
-        );
+        address goonUSDProxy = Upgrades.deployUUPSProxy("goonUSD.sol", abi.encodeCall(goonUSD.initialize, (msg.sender)));
         console.log("goonUSD deployed to:", goonUSDProxy);
 
-        address stRWAProxy = Upgrades.deployUUPSProxy(
-            "stRWA.sol",
-            abi.encodeCall(stRWA.initialize, (msg.sender))
-        );
-        console.log("stRWA deployed to:", stRWAProxy);
+        address nestProxy = Upgrades.deployUUPSProxy("NEST.sol", abi.encodeCall(NEST.initialize, (msg.sender)));
+        console.log("NEST deployed to:", nestProxy);
 
         vm.stopBroadcast();
     }

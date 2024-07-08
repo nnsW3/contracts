@@ -28,14 +28,12 @@ contract DeployScript is Script {
         console.log("DateTime deployed to:", address(dateTime));
 
         address checkInProxy = Upgrades.deployUUPSProxy(
-            "CheckIn.sol",
-            abi.encodeCall(CheckIn.initialize, (msg.sender, address(dateTime), address(dateTime)))
+            "CheckIn.sol", abi.encodeCall(CheckIn.initialize, (msg.sender, address(dateTime), address(dateTime)))
         );
         console.log("CheckIn deployed to:", checkInProxy);
 
         address faucetProxy = Upgrades.deployUUPSProxy(
-            "Faucet.sol",
-            abi.encodeCall(Faucet.initialize, (msg.sender, checkInProxy, tokenNames, tokenAddresses))
+            "Faucet.sol", abi.encodeCall(Faucet.initialize, (msg.sender, checkInProxy, tokenNames, tokenAddresses))
         );
         console.log("Faucet deployed to:", faucetProxy);
 
@@ -47,20 +45,20 @@ contract DeployScript is Script {
         faucet.transferAdmin(FAUCET_ADMIN_ADDRESS);
 
         address oracleGameProxy = Upgrades.deployUUPSProxy(
-            "OracleGame.sol",
-            abi.encodeCall(OracleGame.initialize, (ORACLE_ADDRESS, pairs, 1721088000, msg.sender))
+            "OracleGame.sol", abi.encodeCall(OracleGame.initialize, (ORACLE_ADDRESS, pairs, 1721088000, msg.sender))
         );
         console.log("OracleGame deployed to:", oracleGameProxy);
 
-        address whitelistProxy = Upgrades.deployUUPSProxy(
-            "Whitelist.sol",
-            abi.encodeCall(Whitelist.initialize, (msg.sender))
-        );
+        address whitelistProxy =
+            Upgrades.deployUUPSProxy("Whitelist.sol", abi.encodeCall(Whitelist.initialize, (msg.sender)));
         console.log("Whitelist deployed to:", whitelistProxy);
 
         address plumeGoonProxy = Upgrades.deployUUPSProxy(
             "PlumeGoon.sol",
-            abi.encodeCall(PlumeGoon.initialize, (msg.sender, "Plume Goon NFT", "GOON", whitelistProxy, checkInProxy, msg.sender, msg.sender))
+            abi.encodeCall(
+                PlumeGoon.initialize,
+                (msg.sender, "Plume Goon NFT", "GOON", whitelistProxy, checkInProxy, msg.sender, msg.sender)
+            )
         );
         console.log("PlumeGoon deployed to:", plumeGoonProxy);
         checkIn._setGoonAddress(plumeGoonProxy);
