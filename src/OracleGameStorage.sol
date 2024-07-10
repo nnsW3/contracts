@@ -2,37 +2,42 @@
 pragma solidity ^0.8.25;
 
 import {ISupraOraclePull} from "./interfaces/SupraOracle.sol";
+import {ICheckIn} from "./interfaces/ICheckIn.sol";
 
 library OracleGameStorage {
     struct Storage {
         ISupraOraclePull oracle;
+        ICheckIn checkin;
         uint256 startTime;
         uint256[] allPairs;
         int256 currentPairIndex;
         uint256 pairDuration;
-        uint256 guessWaitTime;
-        mapping(address => uint256) userPoints;
+        uint256 predictionWaitTime;
+        uint256 predictionCooldown;
+        mapping(uint256 => uint256) pairPrices;
         mapping(address => bool) userParticipated;
-        mapping(uint256 => PairGuesses) priceGuesses;
+        mapping(uint256 => Predictions) predictions;
     }
 
-    struct PriceGuess {
+    struct PriceMovement {
         uint256 timestamp;
-        uint256 price;
-        address nextGuesser; // linked list
+        uint256 originalPrice;
+        bool isLong;
+        bool revealed;
+        address next; // linked list
     }
 
-    struct PairGuesses {
-        address firstGuesser; // first guesser in the linked list
-        address lastGuesser; // last guesser in the linked list
-        mapping(address => PriceGuess) guesses;
+    struct Predictions {
+        address first; // first in the linked list
+        address last; // last in the linked list
+        mapping(address => PriceMovement) priceMovements;
         uint256 lastTimestamp;
     }
 
-    struct UserGuess {
+    struct UserPrediction {
         uint256 pair;
         uint256 timestamp;
-        uint256 price;
+        bool isLong;
         bool rewarded;
     }
 

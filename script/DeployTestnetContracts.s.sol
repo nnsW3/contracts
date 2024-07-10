@@ -19,7 +19,7 @@ contract DeployScript is Script {
 
     string[] private tokenNames = ["ETH", "P"];
     address[] private tokenAddresses = [address(1), P_ADDRESS];
-    uint256[] private pairs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+    uint256[] private pairs = [1, 0, 10, 3, 80, 208, 121, 5000, 5001, 5002, 5004, 5007, 5011];
 
     function run() external {
         vm.startBroadcast(ADMIN_ADDRESS);
@@ -37,17 +37,20 @@ contract DeployScript is Script {
         );
         console.log("Faucet deployed to:", faucetProxy);
 
+        address oracleGameProxy = Upgrades.deployUUPSProxy(
+            "OracleGame.sol",  abi.encodeCall(
+                OracleGame.initialize, (ORACLE_ADDRESS, checkInProxy, pairs, 1720756800, 24 hours, 1 hours, 4 hours, msg.sender)
+            )
+        );
+        console.log("OracleGame deployed to:", oracleGameProxy);
+
         CheckIn checkIn = CheckIn(checkInProxy);
         Faucet faucet = Faucet(payable(faucetProxy));
         checkIn._adminSetContract(CheckInStorage.Task.FAUCET_ETH, faucetProxy);
         checkIn._adminSetContract(CheckInStorage.Task.FAUCET_GOON, faucetProxy);
         checkIn._adminSetContract(CheckInStorage.Task.FAUCET_USDC, faucetProxy);
+        checkIn._adminSetContract(CheckInStorage.Task.SUPRA, oracleGameProxy);
         faucet.transferAdmin(FAUCET_ADMIN_ADDRESS);
-
-        address oracleGameProxy = Upgrades.deployUUPSProxy(
-            "OracleGame.sol", abi.encodeCall(OracleGame.initialize, (ORACLE_ADDRESS, pairs, 1721088000, msg.sender))
-        );
-        console.log("OracleGame deployed to:", oracleGameProxy);
 
         address whitelistProxy =
             Upgrades.deployUUPSProxy("Whitelist.sol", abi.encodeCall(Whitelist.initialize, (msg.sender)));

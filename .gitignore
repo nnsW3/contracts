@@ -11,5 +11,9 @@ out/
 # Docs
 docs/
 
+# IDE files
+.idea/
+.vscode/
+
 # Dotenv file
 .env

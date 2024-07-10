@@ -56,21 +56,11 @@ contract Faucet is Initializable, UUPSUpgradeable {
         _;
     }
 
-    modifier onlySignedByAdmin(string calldata token, bytes32 salt, bytes calldata signature) {
-        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
-        bytes32 message = keccak256(abi.encodePacked(msg.sender, token, salt));
-
-        require(!fs.usedNonces[message], "Signature is already used");
-        require(message.toEthSignedMessageHash().recover(signature) == fs.admin, "Invalid admin signature");
-
-        fs.usedNonces[message] = true;
-        _;
-    }
-
     function getToken(string calldata token, bytes32 salt, bytes calldata signature)
         external
-        onlySignedByAdmin(token, salt, signature)
     {
+        _onlySignedByAdmin(token, salt, signature);
+
         FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
         address tokenAddress = fs.tokens[token];
 
@@ -90,10 +80,6 @@ contract Faucet is Initializable, UUPSUpgradeable {
         }
 
         emit TokenSent(msg.sender, amount, token);
-
-        if (address(fs.checkIn) != address(0)) {
-            fs.checkIn.incrementFaucetPoints(msg.sender, token);
-        }
     }
 
     function transferAdmin(address newAdmin) external onlyAdmin {
@@ -180,6 +166,18 @@ contract Faucet is Initializable, UUPSUpgradeable {
     function isNonceUsed(bytes32 nonce) public view returns (bool) {
         FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
         return fs.usedNonces[nonce];
+    }
+
+    // Internal functions
+
+    function _onlySignedByAdmin(string calldata token, bytes32 salt, bytes calldata signature) internal {
+        FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
+        bytes32 message = keccak256(abi.encodePacked(msg.sender, token, salt));
+
+        require(!fs.usedNonces[message], "Signature is already used");
+        require(message.toEthSignedMessageHash().recover(signature) == fs.admin, "Invalid admin signature");
+
+        fs.usedNonces[message] = true;
     }
 
     receive() external payable {}

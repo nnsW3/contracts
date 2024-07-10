@@ -48,6 +48,7 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
         cs.taskBasePoints[CheckInStorage.Task.FAUCET_USDC] = 5000;
         cs.taskBasePoints[CheckInStorage.Task.NEST] = 5000;
         cs.taskBasePoints[CheckInStorage.Task.AMBIENT] = 5000;
+        cs.taskBasePoints[CheckInStorage.Task.SUPRA] = 5000;
 
         cs.taskContractAddresses[CheckInStorage.Task.FAUCET_ETH] = _faucetAddress;
         cs.taskContractAddresses[CheckInStorage.Task.FAUCET_GOON] = _faucetAddress;
@@ -223,32 +224,28 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
         _setTaskPoints(user);
 
         CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
-        IDateTime dateTime = IDateTime(cs.dateTimeAddress);
-        uint16 currentYear = dateTime.getYear(block.timestamp);
-        uint8 currentMonth = dateTime.getMonth(block.timestamp);
-        uint8 currentDay = dateTime.getDay(block.timestamp);
 
-        uint16 prevYear = dateTime.getYear(cs.faucetLastClaimed[user][token]);
-        uint8 prevMonth = dateTime.getMonth(cs.faucetLastClaimed[user][token]);
+        IDateTime dateTime = IDateTime(cs.dateTimeAddress);
+        uint8 currentDay = dateTime.getDay(block.timestamp);
         uint8 prevDay = dateTime.getDay(cs.faucetLastClaimed[user][token]);
 
-        if (!isSameDay(prevYear, prevMonth, prevDay, currentYear, currentMonth, currentDay)) {
-            cs.faucetLastClaimed[user][token] = block.timestamp;
-            cs.users[user].faucetPoints += cs.faucetPoints;
-            emit PointsUpdated(
-                user,
-                CheckInStorage.UserPoints(
-                    cs.users[user].flightPoints,
-                    cs.users[user].faucetPoints,
-                    cs.users[user].rwaStakingPoints,
-                    cs.users[user].oracleGamePoints
-                )
-            );
-
-            _incrementTaskPoints(
-                user, CheckInStorage.Task.FAUCET_ETH, cs.taskBasePoints[CheckInStorage.Task.FAUCET_ETH]
-            );
+        if (currentDay == prevDay) {
+            return;
         }
+
+        cs.faucetLastClaimed[user][token] = block.timestamp;
+        cs.users[user].faucetPoints += cs.faucetPoints;
+        emit PointsUpdated(
+            user,
+            CheckInStorage.UserPoints(
+                cs.users[user].flightPoints,
+                cs.users[user].faucetPoints,
+                cs.users[user].rwaStakingPoints,
+                cs.users[user].oracleGamePoints
+            )
+        );
+
+        _incrementTaskPoints(user, CheckInStorage.Task.FAUCET_ETH, cs.taskBasePoints[CheckInStorage.Task.FAUCET_ETH]);
     }
 
     function incrementTaskPoints(address user, CheckInStorage.Task task) public {
@@ -273,10 +270,12 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
         uint8 prevMonth = dateTime.getMonth(lastClaimed);
         uint8 prevDay = dateTime.getDay(lastClaimed);
 
-        if (refreshHours == 24 && !isSameDay(prevYear, prevMonth, prevDay, currentYear, currentMonth, currentDay)) {
+        if (
+            refreshHours == 24 && !isSameDay(prevYear, prevMonth, prevDay, currentYear, currentMonth, currentDay)
+                || block.timestamp - lastClaimed >= refreshHours * 1 hours
+        ) {
             _incrementTaskPoints(user, task, cs.taskBasePoints[task]);
         }
-        // TODO: call _incrementTaskPoints for refreshHours == 4
     }
 
     function incrementNestPoints(address user, uint256 amount) external {
