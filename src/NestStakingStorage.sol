@@ -6,11 +6,13 @@ import {IDateTime} from "./interfaces/IDateTime.sol";
 import {stRWA} from "./stRWA.sol";
 import {GOON} from "./GOON.sol";
 import {NEST} from "./NEST.sol";
+import {goonUSD} from "./goonUSD.sol";
 
 library NestStakingStorage {
     struct Storage {
         stRWA stRwaToken;
         GOON goonToken;
+        goonUSD goonUsdToken;
         NEST nestToken;
         address admin;
         uint256 APR;

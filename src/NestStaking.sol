@@ -18,6 +18,7 @@ contract NestStaking is UUPSUpgradeable, AccessControlUpgradeable {
     function initialize(
         address stRwaTokenAddress,
         address goonTokenAddress,
+        address goonUsdTokenAddress,
         address nestTokenAddress,
         address dateTimeAddress,
         address checkInAddress
@@ -28,10 +29,11 @@ contract NestStaking is UUPSUpgradeable, AccessControlUpgradeable {
         NestStakingStorage.Storage storage rs = NestStakingStorage.getStorage();
         rs.stRwaToken = stRWA(stRwaTokenAddress);
         rs.goonToken = GOON(goonTokenAddress);
+        rs.goonUsdToken = goonUSD(goonUsdTokenAddress);
         rs.nestToken = NEST(nestTokenAddress);
         rs.dateTime = IDateTime(dateTimeAddress);
         rs.checkIn = ICheckIn(checkInAddress);
-        rs.APR = 40;
+        rs.APR = 40e18;
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
@@ -42,10 +44,10 @@ contract NestStaking is UUPSUpgradeable, AccessControlUpgradeable {
         require(amount > 0, "Amount must be greater than 0");
 
         NestStakingStorage.Storage storage rs = NestStakingStorage.getStorage();
-        require(rs.goonToken.transferFrom(msg.sender, address(this), amount), "goonUSD transferFrom failed");
+        require(rs.goonUsdToken.transferFrom(msg.sender, address(this), amount), "goonUSD transferFrom failed");
 
-        rs.stRwaToken.mint(msg.sender, amount);
         accumulateRewards(msg.sender);
+        rs.stRwaToken.mint(msg.sender, amount);
         rs.checkIn.incrementTaskPoints(msg.sender, CheckInStorage.Task.NEST);
 
         emit Staked(msg.sender, amount);
@@ -57,7 +59,7 @@ contract NestStaking is UUPSUpgradeable, AccessControlUpgradeable {
 
         accumulateRewards(msg.sender);
         rs.stRwaToken.burn(msg.sender, amount);
-        require(rs.goonToken.transfer(msg.sender, amount), "goonUSD transfer failed");
+        require(rs.goonUsdToken.transfer(msg.sender, amount), "goonUSD transfer failed");
 
         emit Unstaked(msg.sender, amount);
     }
@@ -81,8 +83,11 @@ contract NestStaking is UUPSUpgradeable, AccessControlUpgradeable {
     function getUnclaimedRewards(address user) public view returns (uint256, uint256, uint256) {
         NestStakingStorage.Storage storage rs = NestStakingStorage.getStorage();
         uint256 rewards = rs.unclaimedRewards[user];
+        if (rewards == 0) {
+            return (0, 0, 0);
+        }
         uint256 goonRewards = (rewards * 2) / 1000;
-        uint256 nestRewards = rewards * 2;
+        uint256 nestRewards = (rewards * 2);
         uint256 miles = 1 + ((rewards * 2) / 100 - 1) / 1e18;
 
         return (goonRewards, nestRewards, miles);
@@ -95,8 +100,7 @@ contract NestStaking is UUPSUpgradeable, AccessControlUpgradeable {
 
     function rebase() public onlyRole(DEFAULT_ADMIN_ROLE) {
         NestStakingStorage.Storage storage rs = NestStakingStorage.getStorage();
-        require(rs.dateTime.getHour(block.timestamp) == 0, "NestStaking: rebase can only be called once per day");
-
+    
         uint16 prevYear = rs.dateTime.getYear(rs.lastRebaseTimestamp);
         uint8 prevMonth = rs.dateTime.getMonth(rs.lastRebaseTimestamp);
         uint8 prevDay = rs.dateTime.getDay(rs.lastRebaseTimestamp);
@@ -104,33 +108,41 @@ contract NestStaking is UUPSUpgradeable, AccessControlUpgradeable {
         uint8 currentMonth = rs.dateTime.getMonth(block.timestamp);
         uint8 currentDay = rs.dateTime.getDay(block.timestamp);
 
-        require(
-            isNextDay(prevYear, prevMonth, prevDay, currentYear, currentMonth, currentDay),
-            "NestStaking: rebase already called today"
-        );
+        if (rs.lastRebaseTimestamp != 0) {
+            require(
+                isNextDay(prevYear, prevMonth, prevDay, currentYear, currentMonth, currentDay),
+                "NestStaking: rebase already called today"
+            );
+        }
 
-        uint256 rewardMultiplierIncrement = rs.APR / 365;
+        uint256 rewardMultiplierIncrement = rs.APR / (100 * 365);
         rs.stRwaToken.addRewardMultiplier(rewardMultiplierIncrement);
         rs.lastRebaseTimestamp = block.timestamp;
     }
 
-    function getAccumulatedRewards(address user) internal view returns (uint256) {
+    function getAccumulatedRewards(address user) public view returns (uint256) {
         NestStakingStorage.Storage storage rs = NestStakingStorage.getStorage();
         uint256 userStake = rs.stRwaToken.balanceOf(user);
-        uint256 previousMidnight = block.timestamp - (block.timestamp % SECONDS_PER_DAY);
-        uint256 lastMidnight = rs.lastAccumulated[user] - (rs.lastAccumulated[user] % SECONDS_PER_DAY);
-        uint256 n = (previousMidnight - lastMidnight) / SECONDS_PER_DAY;
+        if (userStake != 0 && rs.lastAccumulated[user] != 0) {
+            uint256 previousMidnight = block.timestamp - (block.timestamp % SECONDS_PER_DAY);
+            uint256 lastMidnight = rs.lastAccumulated[user] - (rs.lastAccumulated[user] % SECONDS_PER_DAY);
+            uint256 n = (previousMidnight - lastMidnight) / SECONDS_PER_DAY;
 
-        uint256 rateTo18 = 36500e18 / (36500 + rs.APR);
-        uint256 rewards = userStake * (1e18 - power(rateTo18, n)) / (1e18 - rateTo18);
+            uint256 rateTo18 = 36500e36 / (36500e18 + rs.APR);
+            uint256 rewards = userStake * (1e18 - power(rateTo18, n)) / (1e18 - rateTo18);
 
-        return rewards;
+            return rewards;
+        } else {
+            return 0;
+        }
     }
 
     function accumulateRewards(address user) internal {
         NestStakingStorage.Storage storage rs = NestStakingStorage.getStorage();
         uint256 rewards = getAccumulatedRewards(user);
-        rs.unclaimedRewards[user] += rewards;
+        if (rewards != 0) {
+            rs.unclaimedRewards[user] += rewards;
+        }
         rs.lastAccumulated[user] = block.timestamp;
     }
 
