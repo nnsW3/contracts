@@ -10,7 +10,7 @@ contract stRWA is ERC20Upgradeable, ERC20BurnableUpgradeable, AccessControlUpgra
     uint256 private constant BASE = 1e18;
     uint256 private _totalShares;
     uint256 public rewardMultiplier;
-    address public RWAStaking;
+    address public nestStakingAddress;
 
     mapping(address => uint256) private _shares;
     mapping(address => mapping(address => uint256)) private _allowances;
@@ -35,8 +35,8 @@ contract stRWA is ERC20Upgradeable, ERC20BurnableUpgradeable, AccessControlUpgra
         rewardMultiplier = BASE;
     }
 
-    modifier _onlyRWAStaking() {
-        require(msg.sender == RWAStaking, "stRWA: caller is not the RWAStaking contract");
+    modifier _onlyNest() {
+        require(msg.sender == nestStakingAddress, "stRWA: caller is not the NestStaking contract");
         _;
     }
 
@@ -129,6 +129,10 @@ contract stRWA is ERC20Upgradeable, ERC20BurnableUpgradeable, AccessControlUpgra
         return true;
     }
 
+    function setNestStaking(address _nestStakingAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        nestStakingAddress = _nestStakingAddress;
+    }
+
     function _setRewardMultiplier(uint256 _rewardMultiplier) private {
         require(_rewardMultiplier >= BASE, "stRWA: reward multiplier must be greater than or equal to 1");
         rewardMultiplier = _rewardMultiplier;
@@ -139,7 +143,7 @@ contract stRWA is ERC20Upgradeable, ERC20BurnableUpgradeable, AccessControlUpgra
         _setRewardMultiplier(_rewardMultiplier);
     }
 
-    function addRewardMultiplier(uint256 _rewardMultiplierIncrement) external _onlyRWAStaking {
+    function addRewardMultiplier(uint256 _rewardMultiplierIncrement) external _onlyNest {
         require(_rewardMultiplierIncrement > 0, "stRWA: reward multiplier increment must be greater than 0");
         _setRewardMultiplier(rewardMultiplier + _rewardMultiplierIncrement);
     }
