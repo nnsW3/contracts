@@ -35,7 +35,7 @@ contract Faucet is Initializable, UUPSUpgradeable {
         FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
         fs.admin = _admin;
         fs.etherAmount = 0.001 ether;
-        fs.tokenAmount = 1000;
+        fs.tokenAmount = 0.1 ether; // TODO: when adding a new token, make this into a mapping
         fs.checkIn = ICheckIn(checkInContract);
 
         bytes32 ethHash = keccak256(abi.encodePacked("ETH"));
@@ -74,16 +74,15 @@ contract Faucet is Initializable, UUPSUpgradeable {
             require(success, "Failed to send Ether");
         } else {
             amount = fs.tokenAmount;
-            if (token == "GOON") {
+            if (keccak256(bytes(token)) == keccak256(bytes("GOON"))) {
                 task = CheckInStorage.Task.FAUCET_GOON;
-            } else if (token == "USDC") {
+            } else if (keccak256(bytes(token)) == keccak256(bytes("USDC"))) {
                 task = CheckInStorage.Task.FAUCET_USDC;
             } else {
                 revert("Invalid token");
             }
             IERC20Metadata tokenContract = IERC20Metadata(tokenAddress);
-            uint8 decimals = tokenContract.decimals();
-            tokenContract.transfer(msg.sender, amount * (10 ** decimals));
+            tokenContract.transfer(msg.sender, amount);
         }
 
         emit TokenSent(msg.sender, amount, token);
