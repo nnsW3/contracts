@@ -159,13 +159,12 @@ contract NestStakingTest is Test {
         nestStaking.stake(stakeAmount);
         vm.stopPrank();
 
-
         vm.warp(dateTime.toTimestamp(2024, 5, 9, 0, 0, 1));
 
         vm.prank(admin);
         nestStaking.rebase();
 
-        ( goonRewards,  nestRewards,  miles) = nestStaking.getUnclaimedRewards(user);
+        (goonRewards, nestRewards, miles) = nestStaking.getUnclaimedRewards(user);
         console.logUint(goonRewards);
         console.logUint(nestRewards);
         console.logUint(miles);

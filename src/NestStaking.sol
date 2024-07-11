@@ -86,7 +86,7 @@ contract NestStaking is UUPSUpgradeable, AccessControlUpgradeable {
         if (rewards == 0) {
             return (0, 0, 0);
         }
-        uint256 goonRewards = (rewards * 2) / 1000;
+        uint256 goonRewards = (rewards * 2) / 1000000;
         uint256 nestRewards = (rewards * 2);
         uint256 miles = 1 + ((rewards * 2) / 100 - 1) / 1e18;
 
