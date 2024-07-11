@@ -5,6 +5,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ICheckIn} from "./interfaces/ICheckIn.sol";
+import {CheckInStorage} from "./CheckInStorage.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./FaucetStorage.sol";
@@ -63,23 +64,35 @@ contract Faucet is Initializable, UUPSUpgradeable {
 
         FaucetStorage.Storage storage fs = FaucetStorage.getStorage();
         address tokenAddress = fs.tokens[token];
-
         require(tokenAddress != address(0), "Invalid token");
 
         uint256 amount;
+        CheckInStorage.Task task;
         if (tokenAddress == ETH_ADDRESS) {
             amount = fs.etherAmount;
+            task = CheckInStorage.Task.FAUCET_ETH;
             require(address(this).balance >= amount, "Insufficient balance");
             (bool success,) = msg.sender.call{value: amount, gas: 2300}("");
             require(success, "Failed to send Ether");
         } else {
             amount = fs.tokenAmount;
+            if (token == "GOON") {
+                task = CheckInStorage.Task.FAUCET_GOON;
+            } else if (token == "USDC") {
+                task = CheckInStorage.Task.FAUCET_USDC;
+            } else {
+                revert("Invalid token");
+            }
             IERC20Metadata tokenContract = IERC20Metadata(tokenAddress);
             uint8 decimals = tokenContract.decimals();
             tokenContract.transfer(msg.sender, amount * (10 ** decimals));
         }
 
         emit TokenSent(msg.sender, amount, token);
+
+        if (address(fs.checkIn) != address(0)) {
+            fs.checkIn.incrementTaskPoints(msg.sender, task);
+        }
     }
 
     function transferAdmin(address newAdmin) external onlyAdmin {
