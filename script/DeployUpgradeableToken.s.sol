@@ -27,7 +27,7 @@ contract DeployScript is Script {
         address nestProxy = Upgrades.deployUUPSProxy("NEST.sol", abi.encodeCall(NEST.initialize, (msg.sender)));
         console.log("NEST deployed to:", nestProxy);
         */
-        
+
         address goonProxy = 0xbA22114ec75f0D55C34A5E5A3cf384484Ad9e733;
         address goonUSDProxy = 0x5c1409a46cD113b3A667Db6dF0a8D7bE37ed3BB3;
         address nestProxy = 0xd806259C3389Da7921316fb5489490EA5E2f88C6;

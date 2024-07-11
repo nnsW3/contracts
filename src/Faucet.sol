@@ -57,9 +57,7 @@ contract Faucet is Initializable, UUPSUpgradeable {
         _;
     }
 
-    function getToken(string calldata token, bytes32 salt, bytes calldata signature)
-        external
-    {
+    function getToken(string calldata token, bytes32 salt, bytes calldata signature) external {
         _onlySignedByAdmin(token, salt, signature);
 
         FaucetStorage.Storage storage fs = FaucetStorage.getStorage();

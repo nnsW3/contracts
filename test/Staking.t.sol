@@ -118,6 +118,11 @@ contract NestStakingTest is Test {
         uint256 unclaim = nestStaking.getAccumulatedRewards(user);
         console.logUint(unclaim);
 
+        (uint256 goonRewards, uint256 nestRewards, uint256 miles) = nestStaking.getUnclaimedRewards(user);
+        console.logUint(goonRewards);
+        console.logUint(nestRewards);
+        console.logUint(miles);
+
         vm.prank(user);
         nestStaking.claim();
         uint256 Base = 1e18;
@@ -143,16 +148,27 @@ contract NestStakingTest is Test {
         vm.prank(admin);
         nestStaking.rebase();
 
+        (uint256 goonRewards, uint256 nestRewards, uint256 miles) = nestStaking.getUnclaimedRewards(user);
+        console.logUint(goonRewards);
+        console.logUint(nestRewards);
+        console.logUint(miles);
+
         vm.warp(dateTime.toTimestamp(2024, 5, 8, 11, 0, 1));
 
         vm.startPrank(user);
         nestStaking.stake(stakeAmount);
         vm.stopPrank();
 
+
         vm.warp(dateTime.toTimestamp(2024, 5, 9, 0, 0, 1));
 
         vm.prank(admin);
         nestStaking.rebase();
+
+        ( goonRewards,  nestRewards,  miles) = nestStaking.getUnclaimedRewards(user);
+        console.logUint(goonRewards);
+        console.logUint(nestRewards);
+        console.logUint(miles);
 
         vm.prank(user);
         nestStaking.claim();

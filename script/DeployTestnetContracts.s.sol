@@ -38,8 +38,10 @@ contract DeployScript is Script {
         console.log("Faucet deployed to:", faucetProxy);
 
         address oracleGameProxy = Upgrades.deployUUPSProxy(
-            "OracleGame.sol",  abi.encodeCall(
-                OracleGame.initialize, (ORACLE_ADDRESS, checkInProxy, pairs, 1720756800, 24 hours, 1 hours, 4 hours, msg.sender)
+            "OracleGame.sol",
+            abi.encodeCall(
+                OracleGame.initialize,
+                (ORACLE_ADDRESS, checkInProxy, pairs, 1720756800, 24 hours, 1 hours, 4 hours, msg.sender)
             )
         );
         console.log("OracleGame deployed to:", oracleGameProxy);

@@ -82,7 +82,7 @@ contract NestStaking is UUPSUpgradeable, AccessControlUpgradeable {
 
     function getUnclaimedRewards(address user) public view returns (uint256, uint256, uint256) {
         NestStakingStorage.Storage storage rs = NestStakingStorage.getStorage();
-        uint256 rewards = rs.unclaimedRewards[user];
+        uint256 rewards = rs.unclaimedRewards[user] + getAccumulatedRewards(user);
         if (rewards == 0) {
             return (0, 0, 0);
         }
@@ -100,7 +100,7 @@ contract NestStaking is UUPSUpgradeable, AccessControlUpgradeable {
 
     function rebase() public onlyRole(DEFAULT_ADMIN_ROLE) {
         NestStakingStorage.Storage storage rs = NestStakingStorage.getStorage();
-    
+
         uint16 prevYear = rs.dateTime.getYear(rs.lastRebaseTimestamp);
         uint8 prevMonth = rs.dateTime.getMonth(rs.lastRebaseTimestamp);
         uint8 prevDay = rs.dateTime.getDay(rs.lastRebaseTimestamp);
