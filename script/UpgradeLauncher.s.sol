@@ -11,11 +11,7 @@ contract DeployScript is Script {
     function run() external {
         vm.startBroadcast(ADMIN_ADDRESS);
 
-        Upgrades.upgradeProxy(
-            0xbFf9dFbA4f2DADf5Ce2C22fEF3241Aa466A2B0f3,
-            "RWAFactory.sol",
-            ""
-        );
+        Upgrades.upgradeProxy(0xbFf9dFbA4f2DADf5Ce2C22fEF3241Aa466A2B0f3, "RWAFactory.sol", "");
 
         vm.stopBroadcast();
     }

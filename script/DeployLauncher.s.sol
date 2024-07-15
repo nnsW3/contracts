@@ -14,9 +14,8 @@ contract DeployScript is Script {
     function run() external {
         vm.startBroadcast(ADMIN_ADDRESS);
 
-        address launcherProxy = Upgrades.deployUUPSProxy(
-            "RWAFactory.sol", abi.encodeCall(RWAFactory.initialize, (CHECKIN_ADDRESS))
-        );
+        address launcherProxy =
+            Upgrades.deployUUPSProxy("RWAFactory.sol", abi.encodeCall(RWAFactory.initialize, (CHECKIN_ADDRESS)));
         console.log("Factory deployed to:", launcherProxy);
 
         CheckIn checkIn = CheckIn(CHECKIN_ADDRESS);

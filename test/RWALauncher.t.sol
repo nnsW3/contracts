@@ -17,7 +17,6 @@ contract RWAFactoryTest is Test {
     CheckIn checkIn;
 
     function setUp() public {
-
         dateTime = new DateTime();
         checkIn = new CheckIn();
         vm.startPrank(address(this));
@@ -29,7 +28,6 @@ contract RWAFactoryTest is Test {
         rwaFactory = new RWAFactory();
         rwaFactory.initialize(address(checkIn));
 
-        
         checkIn._adminSetContract(CheckInStorage.Task.RWA_LAUNCHER, address(rwaFactory));
 
         rwaFactory.grantRole(rwaFactory.ADMIN_ROLE(), admin);
