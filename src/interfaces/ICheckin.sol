@@ -9,4 +9,5 @@ interface ICheckIn {
     function incrementFaucetPoints(address user, string memory token) external;
     function incrementTaskPoints(address user, CheckInStorage.Task task) external;
     function incrementNestPoints(address user, uint256 amount) external;
+    function decrementReRolls(address user) external;
 }

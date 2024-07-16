@@ -168,6 +168,7 @@ contract PlumeGoon is
 
         _rerollNFT(_newtokenId, msg.sender, _newtokenUri, burnTokenId);
         checkInContract.incrementPoints(msg.sender, tier);
+        checkInContract.decrementReRolls(msg.sender);
 
         emit Rerolled(msg.sender, _newtokenId, burnTokenId);
     }

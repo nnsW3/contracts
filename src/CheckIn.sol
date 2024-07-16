@@ -17,7 +17,7 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
     using CheckInStorage for CheckInStorage.Storage;
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-    bytes32 public constant ADMIN_ROLE = keccak256("BATCH_REROLL_ROLE");
+    bytes32 public constant BATCH_REROLL_ROLE = keccak256("BATCH_REROLL_ROLE");
     uint256 constant SECONDS_PER_DAY = 86400;
 
     event CheckInEvent(address indexed user, uint16 year, uint8 month, uint8 day);
@@ -93,7 +93,7 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
             currentWeekday = 7;
         }
 
-        if (userInfo.lastCheckInYear == 0) {
+        if (userInfo.lastCheckinYear == 0) {
             userInfo.reRolls = 1;
         }
 
@@ -367,6 +367,13 @@ contract CheckIn is Initializable, AccessControlUpgradeable, UUPSUpgradeable {
     }
 
     function _decrementReRolls(address user) public onlyRole(ADMIN_ROLE) {
+        CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
+        CheckInStorage.UserInfo storage userInfo = cs.users[user];
+        if (userInfo.reRolls == 0) revert NoReRollsLeft();
+        userInfo.reRolls--;
+    }
+
+    function decrementReRolls(address user) public _onlyGoon {
         CheckInStorage.Storage storage cs = CheckInStorage.getStorage();
         CheckInStorage.UserInfo storage userInfo = cs.users[user];
         if (userInfo.reRolls == 0) revert NoReRollsLeft();
