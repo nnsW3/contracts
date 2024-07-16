@@ -43,7 +43,7 @@ contract RWAFactoryTest is Test {
         assertEq(count, 1);
     }
 
-    // Should fail because token cannot be initialized twice
+    // Should fail because the token cannot be initialized twice
     function testFailMintingTwice() public {
         vm.startPrank(user);
         address token = rwaFactory.createToken("Token1", "TKN1", "A unique token", 0, "ipfs://image1");
